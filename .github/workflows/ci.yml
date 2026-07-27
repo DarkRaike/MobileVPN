@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  contracts:
-    name: Stage 0 contracts
+  quality:
+    name: Application quality
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
