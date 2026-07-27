@@ -1,18 +1,29 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
+  import { resolve } from "$app/paths";
+  import type { SubmitFunction } from "@sveltejs/kit";
+  import { onMount } from "svelte";
 
   import type { AuthenticatedUser } from "$lib/server/auth/sessions";
+  import type { AppActionFeedback } from "$lib/features/catalog/types";
 
   import AppIcon from "$lib/components/AppIcon.svelte";
   import UserAvatar from "$lib/components/UserAvatar.svelte";
 
   let {
+    feedback,
+    isAdmin,
     sessionExpiresAt,
     user,
   }: {
+    feedback: AppActionFeedback | null;
+    isAdmin: boolean;
     sessionExpiresAt: Date | null;
     user: AuthenticatedUser;
   } = $props();
+
+  let promoInput = $state("");
+  let submittingPromo = $state(false);
 
   const fullName = $derived(
     [user.firstName, user.lastName].filter(Boolean).join(" "),
@@ -26,6 +37,31 @@
         }).format(sessionExpiresAt)
       : null,
   );
+
+  const enhancePromo: SubmitFunction = () => {
+    submittingPromo = true;
+
+    return async ({ update }) => {
+      await update({ reset: false });
+      submittingPromo = false;
+    };
+  };
+
+  onMount(() => {
+    promoInput = sessionStorage.getItem("astra_promo_code") ?? "";
+  });
+
+  $effect(() => {
+    const promoCode =
+      feedback?.action === "promo" && feedback.ok
+        ? feedback.promoCode?.code
+        : undefined;
+
+    if (promoCode && typeof sessionStorage !== "undefined") {
+      sessionStorage.setItem("astra_promo_code", promoCode);
+      promoInput = promoCode;
+    }
+  });
 </script>
 
 <header class="mb-5">
@@ -46,18 +82,21 @@
       aria-hidden="true"
     ></span>
   </div>
-  <div class="min-w-0">
+  <div class="min-w-0 flex-1">
     <h2 class="truncate text-[19px] font-semibold">{fullName}</h2>
-    {#if user.username}
-      <p class="mt-0.5 truncate text-sm text-[color:var(--color-muted)]">
-        @{user.username}
-      </p>
-    {:else}
-      <p class="mt-0.5 text-sm text-[color:var(--color-muted)]">
-        Username не указан
-      </p>
-    {/if}
+    <p class="mt-0.5 truncate text-sm text-[color:var(--color-muted)]">
+      {user.username ? `@${user.username}` : "Username не указан"}
+    </p>
   </div>
+  {#if isAdmin}
+    <a
+      class="grid min-h-11 min-w-11 place-items-center rounded-[15px] bg-[color:var(--color-card)] text-[color:var(--color-accent)]"
+      href={resolve("/admin")}
+      aria-label="Открыть административный раздел"
+    >
+      <AppIcon name="lock" size={21} />
+    </a>
+  {/if}
 </div>
 
 <p
@@ -73,9 +112,57 @@
   </span>
   <h3 class="mt-4 text-[19px] font-semibold">Активной подписки нет</h3>
   <p class="mt-1 text-sm leading-6 text-[color:var(--color-muted)]">
-    Здесь появятся срок, Subscription URL и QR-код после подтверждённой оплаты.
+    Подписка, QR-код и ссылка подключения появятся после подтверждённой оплаты.
   </p>
 </article>
+
+<h2
+  class="mb-2.5 text-[11px] font-semibold tracking-[0.12em] text-[color:var(--color-muted)] uppercase"
+>
+  Промокод
+</h2>
+<form
+  method="POST"
+  action="?/applyPromo"
+  class="mb-3 flex gap-2"
+  use:enhance={enhancePromo}
+>
+  <label class="sr-only" for="promo-code">Промокод</label>
+  <input
+    id="promo-code"
+    name="code"
+    bind:value={promoInput}
+    required
+    minlength="3"
+    maxlength="32"
+    autocomplete="off"
+    placeholder="Введите код"
+    class="form-control min-w-0 flex-1 uppercase"
+    disabled={submittingPromo}
+  />
+  <button
+    class="min-h-11 rounded-[15px] bg-[color:var(--color-text)] px-4 py-3 text-sm font-semibold text-[color:var(--color-app)] disabled:cursor-wait disabled:opacity-60"
+    type="submit"
+    disabled={submittingPromo}
+  >
+    {submittingPromo ? "Проверяем…" : "Применить"}
+  </button>
+</form>
+
+{#if feedback?.action === "promo"}
+  <div
+    class:feedback-error={!feedback.ok}
+    class:feedback-success={feedback.ok}
+    class="mb-6 rounded-[16px] px-4 py-3 text-sm"
+    role={feedback.ok ? "status" : "alert"}
+  >
+    {feedback.message}
+  </div>
+{:else}
+  <p class="mb-6 text-xs leading-5 text-[color:var(--color-muted)]">
+    Код проверяется сервером и не резервирует скидку до оплаты.
+  </p>
+{/if}
 
 <p
   class="mb-2.5 text-[11px] font-semibold tracking-[0.12em] text-[color:var(--color-muted)] uppercase"
@@ -99,6 +186,16 @@
     ></span>
   </div>
 </article>
+
+{#if isAdmin}
+  <a
+    class="mb-3 flex min-h-12 w-full items-center justify-between rounded-[16px] bg-[color:var(--color-accent)] px-4 py-3 text-sm font-semibold text-[color:var(--color-button-text)]"
+    href={resolve("/admin")}
+  >
+    Административный раздел
+    <AppIcon name="arrow" size={20} />
+  </a>
+{/if}
 
 <form method="POST" action="?/logout" use:enhance>
   <button

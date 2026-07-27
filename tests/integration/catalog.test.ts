@@ -11,6 +11,7 @@ import {
 import { migrateDatabase } from "../../src/lib/server/db/migrate";
 import {
   adminAuditLog,
+  faqItems,
   orders,
   plans,
   promoCodePlans,
@@ -20,6 +21,7 @@ import {
 import {
   createPlan,
   listActivePlans,
+  listPublishedFaq,
   validatePromoCode,
 } from "../../src/lib/server/modules/catalog/catalog";
 import {
@@ -49,6 +51,7 @@ describe("catalog", () => {
 
   beforeEach(async () => {
     await context.database.delete(adminAuditLog);
+    await context.database.delete(faqItems);
     await context.database.delete(orders);
     await context.database.delete(promoCodePlans);
     await context.database.delete(promoCodes);
@@ -110,6 +113,39 @@ describe("catalog", () => {
         entityType: "plan",
       }),
     );
+  });
+
+  it("returns only published FAQ items in administrator order", async () => {
+    await context.database.insert(faqItems).values([
+      {
+        answer: "Second answer",
+        id: randomUUID(),
+        isPublished: true,
+        question: "Second question",
+        sortOrder: 20,
+      },
+      {
+        answer: "Hidden answer",
+        id: randomUUID(),
+        isPublished: false,
+        question: "Hidden question",
+        sortOrder: 0,
+      },
+      {
+        answer: "First answer",
+        id: randomUUID(),
+        isPublished: true,
+        question: "First question",
+        sortOrder: 10,
+      },
+    ]);
+
+    const publishedFaq = await listPublishedFaq(context.database);
+
+    expect(publishedFaq.map((faq) => faq.question)).toEqual([
+      "First question",
+      "Second question",
+    ]);
   });
 
   it("validates limits from successful orders and filters allowed plans", async () => {

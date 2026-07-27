@@ -2,6 +2,11 @@
   import { onMount } from "svelte";
 
   import type { AuthenticatedUser } from "$lib/server/auth/sessions";
+  import type {
+    AppActionFeedback,
+    CatalogPlan,
+    FaqItem,
+  } from "$lib/features/catalog/types";
 
   import AppIcon from "$lib/components/AppIcon.svelte";
   import HomeSection from "$lib/features/home/HomeSection.svelte";
@@ -18,9 +23,17 @@
   } from "./navigation";
 
   let {
+    activePlans,
+    faqItems,
+    feedback,
+    isAdmin,
     sessionExpiresAt,
     user,
   }: {
+    activePlans: CatalogPlan[];
+    faqItems: FaqItem[];
+    feedback: AppActionFeedback | null;
+    isAdmin: boolean;
     sessionExpiresAt: Date | null;
     user: AuthenticatedUser;
   } = $props();
@@ -254,7 +267,7 @@
       aria-label="Поддержка"
       inert={activeIndex !== 0}
     >
-      <SupportSection />
+      <SupportSection {faqItems} {feedback} />
     </section>
 
     <section
@@ -264,6 +277,7 @@
       inert={activeIndex !== 1}
     >
       <HomeSection
+        plans={activePlans}
         {user}
         onNavigate={(index) => goTo(index, { history: "push" })}
       />
@@ -275,7 +289,7 @@
       aria-label="Профиль"
       inert={activeIndex !== 2}
     >
-      <ProfileSection {sessionExpiresAt} {user} />
+      <ProfileSection {feedback} {isAdmin} {sessionExpiresAt} {user} />
     </section>
   </div>
 
