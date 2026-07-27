@@ -3,6 +3,7 @@
     | "arrow"
     | "check"
     | "clock"
+    | "copy"
     | "headset"
     | "home"
     | "lock"
@@ -38,6 +39,9 @@
   {:else if name === "clock"}
     <circle cx="12" cy="12" r="9"></circle>
     <path d="M12 7v5l3 2"></path>
+  {:else if name === "copy"}
+    <rect x="8" y="8" width="11" height="11" rx="2"></rect>
+    <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
   {:else if name === "headset" || name === "support"}
     <path d="M4 13v-2a8 8 0 0 1 16 0v2"></path>
     <path d="M6 17H5a2 2 0 0 1-2-2v-1a2 2 0 0 1 2-2h1v5Z"></path>

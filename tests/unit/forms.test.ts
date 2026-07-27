@@ -4,6 +4,7 @@ import {
   assertFormPayloadSize,
   parsePlanInput,
   parsePromoCodeInput,
+  parsePurchaseInput,
   parseSupportTicketInput,
 } from "../../src/lib/server/validation/forms";
 
@@ -69,5 +70,22 @@ describe("server form validation", () => {
     expect(() => assertFormPayloadSize(formData, 8)).toThrowError(
       expect.objectContaining({ code: "REQUEST_TOO_LARGE" }),
     );
+  });
+
+  it("requires explicit terms acceptance and normalizes a purchase promo", () => {
+    const formData = new FormData();
+    formData.set("idempotencyKey", "00000000-0000-4000-8000-000000000010");
+    formData.set("planId", "00000000-0000-4000-8000-000000000020");
+    formData.set("promoCode", " summer 20 ");
+    formData.set("termsAccepted", "true");
+
+    expect(parsePurchaseInput(formData)).toEqual({
+      idempotencyKey: "00000000-0000-4000-8000-000000000010",
+      planId: "00000000-0000-4000-8000-000000000020",
+      promoCode: "SUMMER20",
+    });
+
+    formData.delete("termsAccepted");
+    expect(() => parsePurchaseInput(formData)).toThrow();
   });
 });

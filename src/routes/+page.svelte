@@ -27,6 +27,8 @@
     faqItems={data.faqItems}
     {feedback}
     isAdmin={data.isAdmin}
+    profileOverview={data.profileOverview}
+    purchasesEnabled={data.purchasesEnabled}
     sessionExpiresAt={data.sessionExpiresAt}
     user={data.user}
   />

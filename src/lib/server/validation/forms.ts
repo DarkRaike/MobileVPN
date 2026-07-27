@@ -101,6 +101,17 @@ const promoApplicationSchema = z.object({
     .pipe(z.string().regex(/^[A-Z0-9_-]{3,32}$/)),
 });
 
+const purchaseSchema = z.object({
+  idempotencyKey: z.string().uuid(),
+  planId: entityIdSchema,
+  promoCode: z
+    .string()
+    .transform(normalizePromoCode)
+    .pipe(z.string().regex(/^[A-Z0-9_-]{3,32}$/))
+    .optional(),
+  termsAccepted: z.literal("true"),
+});
+
 const supportStatusSchema = z.enum(["new", "in_progress", "resolved"]);
 
 function getRequiredString(formData: FormData, name: string): string {
@@ -253,6 +264,26 @@ export function parsePromoApplication(formData: FormData): { code: string } {
   return promoApplicationSchema.parse({
     code: getRequiredString(formData, "code"),
   });
+}
+
+export function parsePurchaseInput(formData: FormData): {
+  idempotencyKey: string;
+  planId: string;
+  promoCode?: string;
+} {
+  const rawPromoCode = getRequiredString(formData, "promoCode").trim();
+  const parsed = purchaseSchema.parse({
+    idempotencyKey: getRequiredString(formData, "idempotencyKey"),
+    planId: getRequiredString(formData, "planId"),
+    promoCode: rawPromoCode || undefined,
+    termsAccepted: getRequiredString(formData, "termsAccepted"),
+  });
+
+  return {
+    idempotencyKey: parsed.idempotencyKey,
+    planId: parsed.planId,
+    promoCode: parsed.promoCode,
+  };
 }
 
 export function parseSupportStatus(formData: FormData): {

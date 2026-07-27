@@ -29,10 +29,12 @@ export interface PromoCodeFeedback {
 }
 
 export interface AppActionFeedback {
-  action?: "promo" | "support";
+  action?: "promo" | "purchase" | "support";
   code?: string;
+  invoiceUrl?: string;
   message?: string;
   ok?: boolean;
+  orderId?: string;
   promoCode?: PromoCodeFeedback;
   publicNumber?: string;
   retryAfterSeconds?: number;

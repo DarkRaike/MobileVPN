@@ -20,6 +20,8 @@ interface TelegramBackButton {
   show(): void;
 }
 
+export type TelegramInvoiceStatus = "cancelled" | "failed" | "paid" | "pending";
+
 export interface TelegramWebApp {
   BackButton?: TelegramBackButton;
   colorScheme: "dark" | "light";
@@ -27,6 +29,10 @@ export interface TelegramWebApp {
   initData: string;
   offEvent(event: "themeChanged", callback: () => void): void;
   onEvent(event: "themeChanged", callback: () => void): void;
+  openInvoice?(
+    url: string,
+    callback?: (status: TelegramInvoiceStatus) => void,
+  ): void;
   ready(): void;
   setBackgroundColor?(color: string): void;
   setBottomBarColor?(color: string): void;

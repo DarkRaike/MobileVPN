@@ -1,30 +1,114 @@
 <script lang="ts">
+  import { enhance } from "$app/forms";
+  import { invalidateAll } from "$app/navigation";
+  import type { SubmitFunction } from "@sveltejs/kit";
+  import { SvelteMap } from "svelte/reactivity";
+
   import type { AuthenticatedUser } from "$lib/server/auth/sessions";
-  import type { CatalogPlan } from "$lib/features/catalog/types";
+  import type {
+    AppActionFeedback,
+    CatalogPlan,
+  } from "$lib/features/catalog/types";
+  import { getTelegramWebApp } from "$lib/telegram/web-app";
 
   import AppIcon from "$lib/components/AppIcon.svelte";
   import UserAvatar from "$lib/components/UserAvatar.svelte";
 
   let {
+    feedback,
     onNavigate,
     plans,
+    purchasesEnabled,
     user,
   }: {
+    feedback: AppActionFeedback | null;
     onNavigate: (index: number) => void;
     plans: CatalogPlan[];
+    purchasesEnabled: boolean;
     user: AuthenticatedUser;
   } = $props();
 
   let expandedPlanId = $state<string | null | undefined>(undefined);
+  let purchaseMessage = $state<string | null>(null);
+  let submittingPlanId = $state<string | null>(null);
+  let termsAccepted = $state(false);
+  const purchaseAttemptKeys = new SvelteMap<string, string>();
   const featuredPlanId = $derived(
     plans.find((plan) => plan.isFeatured)?.id ?? null,
   );
   const activeExpandedPlanId = $derived(
     expandedPlanId === undefined ? featuredPlanId : expandedPlanId,
   );
+  const promoPreviewByPlan = $derived(
+    new Map(
+      feedback?.action === "promo" && feedback.ok
+        ? (feedback.promoCode?.preview ?? []).map((preview) => [
+            preview.planId,
+            preview,
+          ])
+        : [],
+    ),
+  );
 
   function togglePlan(planId: string): void {
     expandedPlanId = activeExpandedPlanId === planId ? null : planId;
+  }
+
+  function getStoredPromoCode(): string {
+    try {
+      return sessionStorage.getItem("astra_promo_code") ?? "";
+    } catch {
+      return "";
+    }
+  }
+
+  function enhancePurchase(planId: string): SubmitFunction {
+    return ({ cancel, formData }) => {
+      if (!termsAccepted || submittingPlanId) {
+        cancel();
+        return;
+      }
+
+      const attemptKey = purchaseAttemptKeys.get(planId) ?? crypto.randomUUID();
+      purchaseAttemptKeys.set(planId, attemptKey);
+      formData.set("idempotencyKey", attemptKey);
+      formData.set("promoCode", getStoredPromoCode());
+      submittingPlanId = planId;
+      purchaseMessage = null;
+
+      return async ({ result, update }) => {
+        await update({ invalidateAll: false, reset: false });
+        submittingPlanId = null;
+
+        if (
+          result.type !== "success" ||
+          typeof result.data?.invoiceUrl !== "string"
+        ) {
+          return;
+        }
+
+        purchaseAttemptKeys.delete(planId);
+        const webApp = getTelegramWebApp();
+
+        if (!webApp?.openInvoice) {
+          purchaseMessage =
+            "Откройте приложение внутри Telegram, чтобы оплатить счёт.";
+          return;
+        }
+
+        webApp.openInvoice(result.data.invoiceUrl, (status) => {
+          purchaseMessage =
+            status === "paid"
+              ? "Telegram принял оплату. Ожидаем серверное подтверждение."
+              : status === "pending"
+                ? "Платёж обрабатывается. Статус появится в профиле."
+                : status === "cancelled"
+                  ? "Оплата отменена."
+                  : "Telegram не смог завершить оплату.";
+          void invalidateAll();
+        });
+      };
+    };
   }
 </script>
 
@@ -124,6 +208,40 @@
   <span class="text-xs text-[color:var(--color-muted)]">до 3 устройств</span>
 </div>
 
+<label
+  class="surface mb-3 flex min-h-14 cursor-pointer items-start gap-3 rounded-[18px] px-4 py-3 text-sm leading-5"
+>
+  <input
+    class="mt-0.5 h-5 w-5 shrink-0 accent-[color:var(--color-accent)]"
+    type="checkbox"
+    bind:checked={termsAccepted}
+    disabled={!purchasesEnabled}
+  />
+  <span>
+    <span class="block font-semibold">Подтверждаю условия покупки</span>
+    <span class="mt-0.5 block text-xs text-[color:var(--color-muted)]">
+      Одноразовый платёж Telegram Stars. Автопродления нет.
+    </span>
+  </span>
+</label>
+
+{#if feedback?.action === "purchase" || purchaseMessage}
+  <div
+    class:feedback-error={feedback?.action === "purchase" && !feedback.ok}
+    class:feedback-success={feedback?.action !== "purchase" || feedback.ok}
+    class="mb-3 rounded-[16px] px-4 py-3 text-sm"
+    role={feedback?.action === "purchase" && !feedback.ok ? "alert" : "status"}
+  >
+    {purchaseMessage ?? feedback?.message}
+  </div>
+{/if}
+
+{#if !purchasesEnabled}
+  <p class="mb-3 text-xs leading-5 text-[color:var(--color-muted)]">
+    Реальные платежи отключены до прохождения production gates.
+  </p>
+{/if}
+
 {#if plans.length === 0}
   <article class="surface rounded-[24px] p-5">
     <span
@@ -139,6 +257,7 @@
 {:else}
   <div class="space-y-2.5">
     {#each plans as plan (plan.id)}
+      {@const preview = promoPreviewByPlan.get(plan.id)}
       <article class:open={activeExpandedPlanId === plan.id} class="tariff">
         <div
           class="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 gap-y-[5px] px-3.5 pt-3.5 pb-[5px]"
@@ -156,17 +275,45 @@
               {plan.durationDays} дней
             </span>
           </button>
-          <span class="text-[18px] font-semibold whitespace-nowrap">
-            {plan.priceStars} ⭐
+          <span class="text-right whitespace-nowrap">
+            {#if preview}
+              <span
+                class="block text-xs text-[color:var(--color-muted)] line-through"
+              >
+                {plan.priceStars} ⭐
+              </span>
+              <span class="block text-[18px] font-semibold">
+                {preview.totalStars} ⭐
+              </span>
+            {:else}
+              <span class="block text-[18px] font-semibold">
+                {plan.priceStars} ⭐
+              </span>
+            {/if}
           </span>
-          <button
-            class="min-h-11 min-w-[92px] rounded-[14px] bg-[color:var(--color-text)] px-4 py-3 text-sm font-semibold text-[color:var(--color-app)] opacity-55"
-            type="button"
-            disabled
-            title="Оплата будет подключена на этапе 3"
+          <form
+            method="POST"
+            action="?/createOrder"
+            use:enhance={enhancePurchase(plan.id)}
           >
-            Купить
-          </button>
+            <input type="hidden" name="planId" value={plan.id} />
+            <input type="hidden" name="promoCode" value="" />
+            <input type="hidden" name="idempotencyKey" value="" />
+            <input
+              type="hidden"
+              name="termsAccepted"
+              value={termsAccepted ? "true" : "false"}
+            />
+            <button
+              class="min-h-11 min-w-[92px] rounded-[14px] bg-[color:var(--color-text)] px-4 py-3 text-sm font-semibold text-[color:var(--color-app)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-45"
+              type="submit"
+              disabled={!purchasesEnabled ||
+                !termsAccepted ||
+                submittingPlanId !== null}
+            >
+              {submittingPlanId === plan.id ? "Счёт…" : "Купить"}
+            </button>
+          </form>
           <button
             class="col-span-3 flex min-h-11 items-center justify-center text-[color:var(--color-muted)]"
             type="button"
@@ -199,9 +346,11 @@
                 <li>До 3 личных устройств</li>
                 <li>Современное шифрование VLESS</li>
               </ul>
-              <p class="text-xs">
-                Оплата Telegram Stars будет подключена на этапе покупки.
-              </p>
+              {#if preview}
+                <p class="text-xs text-[color:var(--color-accent)]">
+                  Скидка {preview.discountStars} Stars применится на сервере.
+                </p>
+              {/if}
             </div>
           </div>
         </div>

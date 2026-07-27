@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
 
   import type { AuthenticatedUser } from "$lib/server/auth/sessions";
+  import type { getProfileOverview } from "$lib/server/modules/subscriptions/profile";
   import type {
     AppActionFeedback,
     CatalogPlan,
@@ -27,6 +28,8 @@
     faqItems,
     feedback,
     isAdmin,
+    profileOverview,
+    purchasesEnabled,
     sessionExpiresAt,
     user,
   }: {
@@ -34,6 +37,8 @@
     faqItems: FaqItem[];
     feedback: AppActionFeedback | null;
     isAdmin: boolean;
+    profileOverview: Awaited<ReturnType<typeof getProfileOverview>>;
+    purchasesEnabled: boolean;
     sessionExpiresAt: Date | null;
     user: AuthenticatedUser;
   } = $props();
@@ -277,7 +282,9 @@
       inert={activeIndex !== 1}
     >
       <HomeSection
+        {feedback}
         plans={activePlans}
+        {purchasesEnabled}
         {user}
         onNavigate={(index) => goTo(index, { history: "push" })}
       />
@@ -289,7 +296,14 @@
       aria-label="Профиль"
       inert={activeIndex !== 2}
     >
-      <ProfileSection {feedback} {isAdmin} {sessionExpiresAt} {user} />
+      <ProfileSection
+        {feedback}
+        {isAdmin}
+        {profileOverview}
+        {sessionExpiresAt}
+        {user}
+        onNavigate={(index) => goTo(index, { history: "push" })}
+      />
     </section>
   </div>
 

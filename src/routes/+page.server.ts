@@ -9,6 +9,7 @@ import {
 import { revokeSession } from "$lib/server/auth/sessions";
 import { getRuntimeConfig } from "$lib/server/config/runtime";
 import { getDatabase } from "$lib/server/db/runtime";
+import { getTelegramStarsPayments } from "$lib/server/integrations/payments/runtime";
 import {
   TelegramSupportNotifier,
   UnavailableSupportNotifier,
@@ -18,6 +19,8 @@ import {
   listPublishedFaq,
   validatePromoCode,
 } from "$lib/server/modules/catalog/catalog";
+import { createOrderInvoice } from "$lib/server/modules/orders/orders";
+import { getProfileOverview } from "$lib/server/modules/subscriptions/profile";
 import { createSupportTicket } from "$lib/server/modules/support/support";
 import { consumeRateLimit } from "$lib/server/security/rate-limit";
 import {
@@ -25,6 +28,7 @@ import {
   assertRequestSize,
   isValidationError,
   parsePromoApplication,
+  parsePurchaseInput,
   parseSupportTicketInput,
 } from "$lib/server/validation/forms";
 
@@ -33,11 +37,13 @@ import type { Actions, PageServerLoad } from "./$types";
 const FORM_MAXIMUM_BYTES = 16 * 1024;
 const PROMO_RATE_LIMIT = 15;
 const PROMO_RATE_LIMIT_WINDOW_SECONDS = 60;
+const PURCHASE_RATE_LIMIT = 5;
+const PURCHASE_RATE_LIMIT_WINDOW_SECONDS = 60;
 const SUPPORT_RATE_LIMIT = 5;
 const SUPPORT_RATE_LIMIT_WINDOW_SECONDS = 10 * 60;
 
 function actionError(
-  action: "promo" | "support",
+  action: "promo" | "purchase" | "support",
   error: unknown,
   fallbackMessage: string,
 ) {
@@ -64,7 +70,9 @@ function actionError(
       errorCode:
         action === "support"
           ? "SUPPORT_CREATE_FAILED"
-          : "PROMO_VALIDATE_FAILED",
+          : action === "purchase"
+            ? "ORDER_CREATE_FAILED"
+            : "PROMO_VALIDATE_FAILED",
       errorType: error instanceof Error ? error.name : "UnknownError",
       level: "error",
       timestamp: new Date().toISOString(),
@@ -83,12 +91,21 @@ export const load: PageServerLoad = async ({ locals }) => {
   const config = getRuntimeConfig();
   let activePlans: Awaited<ReturnType<typeof listActivePlans>> = [];
   let faqItems: Awaited<ReturnType<typeof listPublishedFaq>> = [];
+  let profileOverview: Awaited<ReturnType<typeof getProfileOverview>> = {
+    purchaseHistory: [],
+    subscription: { status: "none" },
+  };
 
   if (locals.user) {
     const { database } = await getDatabase();
-    [activePlans, faqItems] = await Promise.all([
+    [activePlans, faqItems, profileOverview] = await Promise.all([
       listActivePlans(database),
       listPublishedFaq(database),
+      getProfileOverview(
+        database,
+        locals.user.id,
+        config.subscriptionUrlEncryptionKey,
+      ),
     ]);
   }
 
@@ -97,12 +114,81 @@ export const load: PageServerLoad = async ({ locals }) => {
     developmentMockAuthEnabled: config.developmentMock.enabled,
     faqItems,
     isAdmin: isAdminUser(locals.user, config.telegramAdminUserId),
+    profileOverview,
+    purchasesEnabled: config.liveOperationsEnabled,
     sessionExpiresAt: locals.session?.expiresAt ?? null,
     user: locals.user,
   };
 };
 
 export const actions = {
+  createOrder: async ({ getClientAddress, locals, request }) => {
+    const user = locals.user;
+
+    if (!user) {
+      return fail(401, {
+        action: "purchase",
+        code: "AUTH_REQUIRED",
+        message: "Сначала войдите через Telegram.",
+        ok: false as const,
+      });
+    }
+
+    const config = getRuntimeConfig();
+
+    if (!config.liveOperationsEnabled) {
+      return fail(503, {
+        action: "purchase",
+        code: "LIVE_OPERATIONS_DISABLED",
+        message: "Покупки временно недоступны.",
+        ok: false as const,
+      });
+    }
+
+    const rateLimit = consumeRateLimit(
+      `purchase:${user.id}:${getClientAddress()}`,
+      PURCHASE_RATE_LIMIT,
+      PURCHASE_RATE_LIMIT_WINDOW_SECONDS,
+    );
+
+    if (!rateLimit.allowed) {
+      return fail(429, {
+        action: "purchase",
+        code: "PURCHASE_RATE_LIMITED",
+        message: "Слишком много попыток оплаты. Повторите позже.",
+        ok: false as const,
+        retryAfterSeconds: rateLimit.retryAfterSeconds,
+      });
+    }
+
+    try {
+      assertRequestSize(request, FORM_MAXIMUM_BYTES);
+      const formData = await request.formData();
+      assertFormPayloadSize(formData, FORM_MAXIMUM_BYTES);
+      const input = parsePurchaseInput(formData);
+      const { database } = await getDatabase();
+      const invoice = await createOrderInvoice(
+        database,
+        getTelegramStarsPayments(config),
+        user.id,
+        input,
+      );
+
+      return {
+        action: "purchase",
+        invoiceUrl: invoice.invoiceUrl,
+        message: "Счёт создан. Подтвердите оплату в Telegram.",
+        ok: true as const,
+        orderId: invoice.orderId,
+      };
+    } catch (error) {
+      return actionError(
+        "purchase",
+        error,
+        "Не удалось создать счёт. Попробуйте ещё раз.",
+      );
+    }
+  },
   applyPromo: async ({ getClientAddress, locals, request }) => {
     const user = locals.user;
 
