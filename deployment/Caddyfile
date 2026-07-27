@@ -1,0 +1,29 @@
+{
+	admin off
+	email {$ACME_EMAIL}
+}
+
+app.{$BASE_DOMAIN} {
+	encode zstd gzip
+
+	reverse_proxy app:3000 {
+		health_uri /readyz
+		health_interval 30s
+		health_timeout 5s
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+sub.{$BASE_DOMAIN} {
+	@denied path /api/* /dashboard/* /docs* /openapi.json /redoc*
+	respond @denied 404
+
+	@subscription path /sub/*
+	reverse_proxy @subscription marzban:8000
+
+	respond 404
+}

@@ -6,6 +6,8 @@ data/
 playwright-report/
 .svelte-kit/
 test-results/
+__pycache__/
+*.py[cod]
 
 .env
 .env.*

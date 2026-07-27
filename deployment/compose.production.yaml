@@ -1,0 +1,270 @@
+name: astra-vpn
+
+services:
+  reverse-proxy:
+    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    depends_on:
+      app:
+        condition: service_healthy
+      marzban:
+        condition: service_healthy
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
+      BASE_DOMAIN: ${BASE_DOMAIN:?Set BASE_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    networks:
+      - backend
+      - edge
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    read_only: true
+    tmpfs:
+      - /config
+      - /tmp
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "caddy",
+          "validate",
+          "--config",
+          "/etc/caddy/Caddyfile",
+          "--adapter",
+          "caddyfile",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  app:
+    image: ${APP_IMAGE:?Set immutable APP_IMAGE reference}
+    init: true
+    env_file:
+      - ${APP_ENV_FILE:?Set APP_ENV_FILE}
+    environment:
+      ADDRESS_HEADER: X-Forwarded-For
+      BACKUP_STATUS_FILE: /ops/backup-status.json
+      BODY_SIZE_LIMIT: 64K
+      DATABASE_URL: /data/astra-vpn.sqlite
+      HOST: 0.0.0.0
+      HOST_HEADER: X-Forwarded-Host
+      MARZBAN_BASE_URL: http://marzban:8000
+      NODE_ENV: production
+      ORIGIN: https://app.${BASE_DOMAIN:?Set BASE_DOMAIN}
+      PORT: 3000
+      PROTOCOL_HEADER: X-Forwarded-Proto
+      XFF_DEPTH: 1
+    expose:
+      - "3000"
+    networks:
+      - backend
+    volumes:
+      - app-data:/data
+      - operations-state:/ops:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/readyz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  worker:
+    image: ${APP_IMAGE:?Set immutable APP_IMAGE reference}
+    init: true
+    depends_on:
+      app:
+        condition: service_healthy
+      marzban:
+        condition: service_healthy
+    env_file:
+      - ${WORKER_ENV_FILE:?Set WORKER_ENV_FILE}
+    environment:
+      INTERNAL_JOB_URL: http://app:3000/api/internal/jobs/reconcile
+      NODE_ENV: production
+    command:
+      - node
+      - scripts/reconciliation-worker.mjs
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        ["CMD", "node", "-e", "try{process.kill(1,0)}catch{process.exit(1)}"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  monitoring:
+    image: ${APP_IMAGE:?Set immutable APP_IMAGE reference}
+    init: true
+    depends_on:
+      app:
+        condition: service_healthy
+    env_file:
+      - ${MONITORING_ENV_FILE:?Set MONITORING_ENV_FILE}
+    environment:
+      MONITORING_API_URL: http://app:3000/api/internal/monitoring
+      NODE_ENV: production
+    command:
+      - node
+      - scripts/monitoring-worker.mjs
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        ["CMD", "node", "-e", "try{process.kill(1,0)}catch{process.exit(1)}"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  marzban:
+    image: gozargah/marzban:v0.8.4@sha256:8e422c21997e5d2e3fa231eeff73c0a19193c20fc02fa4958e9368abb9623b8d
+    init: true
+    env_file:
+      - ${MARZBAN_ENV_FILE:?Set MARZBAN_ENV_FILE}
+    environment:
+      DOCS: "False"
+      SQLALCHEMY_DATABASE_URL: sqlite:////var/lib/marzban/db.sqlite3
+      UVICORN_HOST: 0.0.0.0
+      UVICORN_PORT: 8000
+      XRAY_JSON: /var/lib/marzban/xray_config.json
+    ports:
+      - "8443:8443/tcp"
+    expose:
+      - "8000"
+    networks:
+      - backend
+      - vpn-egress
+    volumes:
+      - marzban-data:/var/lib/marzban
+      - ${XRAY_CONFIG_FILE:?Set XRAY_CONFIG_FILE}:/var/lib/marzban/xray_config.json:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import socket;s=socket.create_connection(('127.0.0.1',8000),3);s.close()",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  backup:
+    image: ${OPERATIONS_IMAGE:?Set immutable OPERATIONS_IMAGE reference}
+    init: true
+    depends_on:
+      app:
+        condition: service_healthy
+      marzban:
+        condition: service_healthy
+    env_file:
+      - ${BACKUP_ENV_FILE:?Set BACKUP_ENV_FILE}
+    environment:
+      APP_DATABASE_PATH: /source/app/astra-vpn.sqlite
+      BACKUP_PUBLIC_INCLUDE_PATHS_JSON: '["/app/drizzle","/app/deployment"]'
+      BACKUP_SECRET_PATHS_JSON: '["/source/secrets"]'
+      BACKUP_STATUS_FILE: /ops/backup-status.json
+      BACKUP_WORK_DIRECTORY: /work
+      MARZBAN_DATABASE_PATH: /source/marzban/db.sqlite3
+      RELEASE_VERSION: ${RELEASE_VERSION:?Set RELEASE_VERSION}
+      RESTIC_PASSWORD_FILE: /run/secrets/restic_password
+      RESTORE_LIVE_PATHS_JSON: '["/source/app","/source/marzban","/ops"]'
+    networks:
+      - backup-egress
+    volumes:
+      - app-data:/source/app:ro
+      - marzban-data:/source/marzban:ro
+      - operations-state:/ops
+      - backup-work:/work
+      - ${DEPLOY_SECRET_BUNDLE_DIRECTORY:?Set DEPLOY_SECRET_BUNDLE_DIRECTORY}:/source/secrets:ro
+    secrets:
+      - restic_password
+    read_only: true
+    tmpfs:
+      - /tmp
+    user: "0:0"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import json,time;p=json.load(open('/ops/backup-status.json'));assert time.time()-__import__('datetime').datetime.fromisoformat(p['lastSuccessAt'].replace('Z','+00:00')).timestamp()<3900",
+        ]
+      interval: 5m
+      timeout: 10s
+      retries: 2
+      start_period: 70m
+    restart: unless-stopped
+
+networks:
+  backend:
+    internal: true
+  backup-egress:
+  edge:
+  vpn-egress:
+
+volumes:
+  app-data:
+  backup-work:
+  caddy-data:
+  marzban-data:
+  operations-state:
+
+secrets:
+  restic_password:
+    file: ${RESTIC_PASSWORD_FILE_PATH:?Set RESTIC_PASSWORD_FILE_PATH}

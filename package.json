@@ -14,9 +14,10 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "test": "npm run test:contracts && npm run test:unit",
+    "test": "npm run test:contracts && npm run test:unit && npm run test:ops",
     "test:contracts": "node --test tests/contracts/*.test.mjs",
     "test:unit": "vitest run",
+    "test:ops": "node scripts/run-python-tests.mjs",
     "test:e2e": "playwright test",
     "e2e:prepare": "tsx scripts/e2e-setup.ts",
     "e2e:serve": "npm run e2e:prepare && vite dev --host 127.0.0.1 --port 4173",
@@ -28,6 +29,9 @@
     "db:check": "tsx scripts/check-migrations.ts",
     "jobs:run": "node scripts/reconciliation-worker.mjs",
     "monitoring:run": "node scripts/monitoring-worker.mjs",
+    "backup:run": "python3 scripts/backup.py",
+    "restore:drill": "python3 scripts/restore_drill.py",
+    "security:audit": "npm audit --audit-level=high",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run db:check && npm run build && npm run build:contracts"
   },
   "devDependencies": {
