@@ -20,45 +20,63 @@ const paymentDetailsSchema = z.object({
   telegram_payment_charge_id: z.string().min(1).max(512),
   total_amount: z.number().int().nonnegative(),
 });
-const updateSchema = z
-  .object({
-    message: z
-      .object({
-        date: z.number().int().nonnegative(),
-        from: telegramUserSchema,
-        refunded_payment: paymentDetailsSchema.optional(),
-        successful_payment: paymentDetailsSchema.optional(),
-      })
-      .optional(),
-    pre_checkout_query: z
-      .object({
-        currency: z.string(),
-        from: telegramUserSchema,
-        id: z.string().min(1).max(512),
-        invoice_payload: z.string().min(1).max(128),
-        total_amount: z.number().int().nonnegative(),
-      })
-      .optional(),
-    update_id: z.number().int().safe().nonnegative(),
-  })
-  .superRefine((update, context) => {
-    if (
-      !update.pre_checkout_query &&
-      !update.message?.successful_payment &&
-      !update.message?.refunded_payment
-    ) {
-      context.addIssue({
-        code: "custom",
-        message: "Unsupported Telegram update",
-      });
-    }
-  });
+const updateSchema = z.object({
+  message: z
+    .object({
+      date: z.number().int().nonnegative(),
+      from: telegramUserSchema,
+      refunded_payment: paymentDetailsSchema.optional(),
+      successful_payment: paymentDetailsSchema.optional(),
+    })
+    .optional(),
+  pre_checkout_query: z
+    .object({
+      currency: z.string(),
+      from: telegramUserSchema,
+      id: z.string().min(1).max(512),
+      invoice_payload: z.string().min(1).max(128),
+      total_amount: z.number().int().nonnegative(),
+    })
+    .optional(),
+  update_id: z.number().int().safe().nonnegative(),
+});
+const updateEnvelopeSchema = z.object({
+  update_id: z.number().int().safe().nonnegative(),
+});
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function containsPaymentPayload(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (Object.hasOwn(value, "pre_checkout_query")) {
+    return true;
+  }
+
+  const message = value.message;
+
+  return (
+    isRecord(message) &&
+    (Object.hasOwn(message, "successful_payment") ||
+      Object.hasOwn(message, "refunded_payment"))
+  );
+}
 
 export type TelegramPaymentUpdate = z.infer<typeof updateSchema>;
 
 export function parseTelegramPaymentUpdate(
   value: unknown,
 ): TelegramPaymentUpdate {
+  const envelope = updateEnvelopeSchema.parse(value);
+
+  if (!containsPaymentPayload(value)) {
+    return envelope;
+  }
+
   return updateSchema.parse(value);
 }
 
@@ -120,7 +138,7 @@ export async function processTelegramPaymentUpdate(
   now = new Date(),
 ): Promise<{
   duplicate: boolean;
-  kind: "pre_checkout" | "refunded_payment" | "successful_payment";
+  kind: "ignored" | "pre_checkout" | "refunded_payment" | "successful_payment";
 }> {
   const eventId = String(update.update_id);
   const preCheckout = update.pre_checkout_query;
@@ -200,10 +218,7 @@ export async function processTelegramPaymentUpdate(
   const successfulPayment = message?.successful_payment;
 
   if (!message || !successfulPayment) {
-    throw new ApplicationError(
-      "TELEGRAM_UPDATE_UNSUPPORTED",
-      "Неподдерживаемое событие Telegram.",
-    );
+    return { duplicate: false, kind: "ignored" };
   }
 
   const result = await confirmSuccessfulPayment(database, {

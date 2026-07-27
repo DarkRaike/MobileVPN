@@ -1,4 +1,5 @@
 import { json } from "@sveltejs/kit";
+import { ZodError } from "zod";
 
 import { ApplicationError } from "$lib/server/application-error";
 import { getRuntimeConfig } from "$lib/server/config/runtime";
@@ -90,7 +91,9 @@ export const POST: RequestHandler = async ({ request }) => {
     const status =
       error instanceof ApplicationError && error.code === "REQUEST_TOO_LARGE"
         ? 413
-        : error instanceof SyntaxError || error instanceof TypeError
+        : error instanceof SyntaxError ||
+            error instanceof TypeError ||
+            error instanceof ZodError
           ? 400
           : 500;
 
