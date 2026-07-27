@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import { productionReadinessApproved } from "./production-readiness";
+
+const PRODUCTION_DOMAIN_PATTERN =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/u;
+
 const booleanFromEnvironment = z.preprocess((value) => {
   if (typeof value !== "string") {
     return value;
@@ -22,6 +27,10 @@ function emptyStringToUndefined(value: unknown): unknown {
 
 const environmentSchema = z
   .object({
+    BASE_DOMAIN: z.preprocess(
+      emptyStringToUndefined,
+      z.string().trim().toLowerCase().optional(),
+    ),
     DATABASE_URL: z.preprocess(
       emptyStringToUndefined,
       z.string().trim().min(1).default("./data/astra-vpn.sqlite"),
@@ -81,7 +90,10 @@ const environmentSchema = z
     SESSION_SECRET: z.string().min(32),
     SUBSCRIPTION_URL_ENCRYPTION_KEY: z.preprocess(
       emptyStringToUndefined,
-      z.string().min(43).max(44).optional(),
+      z
+        .string()
+        .regex(/^[A-Za-z0-9_-]{43}$/)
+        .optional(),
     ),
     TELEGRAM_ADMIN_USER_ID: z.preprocess(
       emptyStringToUndefined,
@@ -107,7 +119,7 @@ const environmentSchema = z
       emptyStringToUndefined,
       z
         .string()
-        .regex(/^[A-Za-z0-9_-]{16,256}$/)
+        .regex(/^[A-Za-z0-9_-]{32,256}$/)
         .optional(),
     ),
   })
@@ -139,6 +151,57 @@ const environmentSchema = z
       });
     }
 
+    if (environment.NODE_ENV === "production") {
+      const baseDomain = environment.BASE_DOMAIN;
+
+      if (
+        !baseDomain ||
+        !PRODUCTION_DOMAIN_PATTERN.test(baseDomain) ||
+        baseDomain.endsWith(".example") ||
+        baseDomain.endsWith(".test") ||
+        baseDomain === "localhost"
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "A concrete production base domain is required",
+          path: ["BASE_DOMAIN"],
+        });
+      }
+
+      if (environment.SESSION_SECRET.length < 43) {
+        context.addIssue({
+          code: "custom",
+          message:
+            "Production session secret must contain at least 43 characters",
+          path: ["SESSION_SECRET"],
+        });
+      }
+
+      if (
+        environment.ORIGIN &&
+        baseDomain &&
+        environment.ORIGIN !== `https://app.${baseDomain}`
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "Production origin must match the application host",
+          path: ["ORIGIN"],
+        });
+      }
+
+      if (
+        environment.DATABASE_URL === ":memory:" ||
+        (!environment.DATABASE_URL.startsWith("/") &&
+          !environment.DATABASE_URL.startsWith("file:/"))
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "Production database path must be absolute",
+          path: ["DATABASE_URL"],
+        });
+      }
+    }
+
     if (
       environment.NODE_ENV === "production" &&
       !environment.TELEGRAM_ADMIN_USER_ID
@@ -159,6 +222,29 @@ const environmentSchema = z
         code: "custom",
         message: "Production origin must use HTTPS",
         path: ["ORIGIN"],
+      });
+    }
+
+    if (
+      environment.ENABLE_LIVE_OPERATIONS &&
+      environment.ENABLE_DEV_MOCK_AUTH
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Live operations cannot use development mock authentication",
+        path: ["ENABLE_LIVE_OPERATIONS"],
+      });
+    }
+
+    if (
+      environment.NODE_ENV === "production" &&
+      environment.ENABLE_LIVE_OPERATIONS &&
+      !productionReadinessApproved
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Production evidence gates are not approved",
+        path: ["ENABLE_LIVE_OPERATIONS"],
       });
     }
 
@@ -185,10 +271,33 @@ const environmentSchema = z
           });
         }
       }
+
+      if (
+        environment.NODE_ENV === "production" &&
+        environment.MARZBAN_BASE_URL
+      ) {
+        const marzbanUrl = new URL(environment.MARZBAN_BASE_URL);
+
+        if (
+          marzbanUrl.protocol !== "http:" ||
+          marzbanUrl.hostname !== "marzban" ||
+          marzbanUrl.port !== "8000" ||
+          marzbanUrl.username ||
+          marzbanUrl.password
+        ) {
+          context.addIssue({
+            code: "custom",
+            message:
+              "Production Marzban API must use the private Docker service",
+            path: ["MARZBAN_BASE_URL"],
+          });
+        }
+      }
     }
   });
 
 export interface RuntimeConfig {
+  baseDomain?: string;
   databaseUrl: string;
   developmentMock: {
     enabled: boolean;
@@ -253,6 +362,7 @@ export function parseRuntimeConfig(
       : undefined;
 
   return {
+    baseDomain: value.BASE_DOMAIN,
     databaseUrl: value.DATABASE_URL,
     developmentMock: {
       enabled: value.ENABLE_DEV_MOCK_AUTH,

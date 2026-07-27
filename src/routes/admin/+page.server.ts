@@ -19,6 +19,7 @@ import {
   updatePromoCode,
 } from "$lib/server/modules/catalog/catalog";
 import { listOrdersForAdmin } from "$lib/server/modules/orders/orders";
+import { logEvent } from "$lib/server/observability/logger";
 import { requeueProvisioningOrder } from "$lib/server/modules/subscriptions/provisioning";
 import {
   listAuditLog,
@@ -128,15 +129,11 @@ function adminActionError(action: AdminActionName, error: unknown) {
     });
   }
 
-  console.error(
-    JSON.stringify({
-      action,
-      errorCode: "ADMIN_MUTATION_FAILED",
-      errorType: error instanceof Error ? error.name : "UnknownError",
-      level: "error",
-      timestamp: new Date().toISOString(),
-    }),
-  );
+  logEvent("error", {
+    action,
+    errorCode: "ADMIN_MUTATION_FAILED",
+    errorType: error instanceof Error ? error.name : "UnknownError",
+  });
 
   return fail(500, {
     action,

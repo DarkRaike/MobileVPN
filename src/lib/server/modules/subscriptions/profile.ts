@@ -4,6 +4,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import type { Database } from "../../db/client";
 import { orders, subscriptions } from "../../db/schema";
 import { decryptSubscriptionUrl } from "../../security/subscription-url";
+import { logEvent } from "../../observability/logger";
 import { listPurchaseHistory } from "../orders/orders";
 
 export interface ActiveSubscriptionView {
@@ -111,15 +112,12 @@ export async function getProfileOverview(
       try {
         qrCodeDataUrl = createQrCodeDataUrl(subscriptionUrl);
       } catch (error) {
-        console.error(
-          JSON.stringify({
-            errorCode: "SUBSCRIPTION_QR_GENERATION_FAILED",
-            errorType: error instanceof Error ? error.name : "UnknownError",
-            level: "error",
-            subscriptionId: subscription.id,
-            timestamp: now.toISOString(),
-          }),
-        );
+        logEvent("error", {
+          errorCode: "SUBSCRIPTION_QR_GENERATION_FAILED",
+          errorType: error instanceof Error ? error.name : "UnknownError",
+          subscriptionId: subscription.id,
+          timestamp: now.toISOString(),
+        });
       }
 
       subscriptionView = {
@@ -131,15 +129,12 @@ export async function getProfileOverview(
         subscriptionUrl,
       };
     } catch (error) {
-      console.error(
-        JSON.stringify({
-          errorCode: "SUBSCRIPTION_PROFILE_DECRYPT_FAILED",
-          errorType: error instanceof Error ? error.name : "UnknownError",
-          level: "error",
-          subscriptionId: subscription.id,
-          timestamp: now.toISOString(),
-        }),
-      );
+      logEvent("error", {
+        errorCode: "SUBSCRIPTION_PROFILE_DECRYPT_FAILED",
+        errorType: error instanceof Error ? error.name : "UnknownError",
+        subscriptionId: subscription.id,
+        timestamp: now.toISOString(),
+      });
       subscriptionView = { status: "error" };
     }
   } else if (provisioning?.status === "provisioning_failed") {

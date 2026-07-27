@@ -9,72 +9,84 @@ import {
 import { validateSession } from "$lib/server/auth/sessions";
 import { getRuntimeConfig } from "$lib/server/config/runtime";
 import { getDatabase } from "$lib/server/db/runtime";
+import { logEvent } from "$lib/server/observability/logger";
+import { applySecurityHeaders } from "$lib/server/security/headers";
 
 export const handle: Handle = async ({ event, resolve }) => {
   const config = getRuntimeConfig();
   const requestId = randomUUID();
+  const startedAt = Date.now();
 
   event.locals.session = null;
   event.locals.user = null;
+  event.locals.requestId = requestId;
 
-  const token = event.cookies.get(getSessionCookieName(config));
+  try {
+    const token = event.cookies.get(getSessionCookieName(config));
 
-  if (token) {
-    const { database } = await getDatabase();
-    const session = await validateSession(
-      database,
-      token,
-      config.sessionSecret,
-    );
+    if (token) {
+      const { database } = await getDatabase();
+      const session = await validateSession(
+        database,
+        token,
+        config.sessionSecret,
+      );
 
-    if (session) {
-      event.locals.session = session;
-      event.locals.user = session.user;
-    } else {
-      deleteSessionCookie(event.cookies, config);
+      if (session) {
+        event.locals.session = session;
+        event.locals.user = session.user;
+      } else {
+        deleteSessionCookie(event.cookies, config);
+      }
     }
+
+    const response = await resolve(event);
+
+    applySecurityHeaders(response.headers, config.isProduction);
+    response.headers.set("X-Request-Id", requestId);
+
+    if (
+      !event.url.pathname.startsWith("/_app/") &&
+      !response.headers.has("Cache-Control")
+    ) {
+      response.headers.set("Cache-Control", "private, no-store");
+    }
+
+    if (!event.url.pathname.startsWith("/_app/")) {
+      logEvent(response.status >= 500 ? "error" : "info", {
+        durationMilliseconds: Date.now() - startedAt,
+        method: event.request.method,
+        requestId,
+        route: event.route.id ?? "unmatched",
+        status: response.status,
+        userId: event.locals.user?.id,
+      });
+    }
+
+    return response;
+  } catch (error) {
+    logEvent("error", {
+      durationMilliseconds: Date.now() - startedAt,
+      errorCode: "REQUEST_FAILED",
+      errorType: error instanceof Error ? error.name : "UnknownError",
+      method: event.request.method,
+      requestId,
+      route: event.route.id ?? "unmatched",
+      userId: event.locals.user?.id,
+    });
+    throw error;
   }
-
-  const response = await resolve(event);
-
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("Referrer-Policy", "no-referrer");
-  response.headers.set(
-    "Permissions-Policy",
-    "camera=(), geolocation=(), microphone=(), payment=()",
-  );
-  response.headers.set("X-Request-Id", requestId);
-
-  if (
-    !event.url.pathname.startsWith("/_app/") &&
-    !response.headers.has("Cache-Control")
-  ) {
-    response.headers.set("Cache-Control", "private, no-store");
-  }
-
-  if (config.isProduction) {
-    response.headers.set(
-      "Strict-Transport-Security",
-      "max-age=31536000; includeSubDomains",
-    );
-  }
-
-  return response;
 };
 
 export const handleError: HandleServerError = ({ error, event }) => {
-  const correlationId = randomUUID();
+  const correlationId = event.locals.requestId || randomUUID();
 
-  console.error(
-    JSON.stringify({
-      correlationId,
-      errorCode: "UNHANDLED_ERROR",
-      errorType: error instanceof Error ? error.name : "UnknownError",
-      level: "error",
-      route: event.route.id,
-      timestamp: new Date().toISOString(),
-    }),
-  );
+  logEvent("error", {
+    correlationId,
+    errorCode: "UNHANDLED_ERROR",
+    errorType: error instanceof Error ? error.name : "UnknownError",
+    route: event.route.id,
+  });
 
   return {
     code: "INTERNAL_ERROR",

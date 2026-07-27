@@ -18,6 +18,7 @@ declare global {
     }
 
     interface Locals {
+      requestId: string;
       session: AuthenticatedSession | null;
       user: AuthenticatedUser | null;
     }

@@ -14,6 +14,7 @@ import {
   TelegramSupportNotifier,
   UnavailableSupportNotifier,
 } from "$lib/server/integrations/telegram/support-notifier";
+import { logEvent } from "$lib/server/observability/logger";
 import {
   listActivePlans,
   listPublishedFaq,
@@ -65,19 +66,15 @@ function actionError(
     });
   }
 
-  console.error(
-    JSON.stringify({
-      errorCode:
-        action === "support"
-          ? "SUPPORT_CREATE_FAILED"
-          : action === "purchase"
-            ? "ORDER_CREATE_FAILED"
-            : "PROMO_VALIDATE_FAILED",
-      errorType: error instanceof Error ? error.name : "UnknownError",
-      level: "error",
-      timestamp: new Date().toISOString(),
-    }),
-  );
+  logEvent("error", {
+    errorCode:
+      action === "support"
+        ? "SUPPORT_CREATE_FAILED"
+        : action === "purchase"
+          ? "ORDER_CREATE_FAILED"
+          : "PROMO_VALIDATE_FAILED",
+    errorType: error instanceof Error ? error.name : "UnknownError",
+  });
 
   return fail(500, {
     action,

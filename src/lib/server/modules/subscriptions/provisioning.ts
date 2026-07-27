@@ -24,6 +24,7 @@ import {
 } from "../../db/schema";
 import { calculateSubscriptionExpiry } from "../../domain/subscriptions";
 import type { Marzban, MarzbanUser } from "../../integrations/marzban/marzban";
+import { logEvent } from "../../observability/logger";
 import { encryptSubscriptionUrl } from "../../security/subscription-url";
 import { createAuditRecord } from "../admin/audit";
 
@@ -374,15 +375,12 @@ export async function provisionOrder(
   } catch (error) {
     const errorCode = normalizeErrorCode(error);
 
-    console.error(
-      JSON.stringify({
-        errorCode,
-        level: "error",
-        orderId,
-        service: "marzban",
-        timestamp: now.toISOString(),
-      }),
-    );
+    logEvent("error", {
+      errorCode,
+      orderId,
+      service: "marzban",
+      timestamp: now.toISOString(),
+    });
     await markFailed(database, orderId, errorCode, now);
 
     return { errorCode, orderId, status: "failed" };
@@ -586,15 +584,12 @@ export async function reconcileSubscriptions(
       synchronized += 1;
     } catch (error) {
       failed += 1;
-      console.error(
-        JSON.stringify({
-          errorCode: normalizeErrorCode(error),
-          level: "error",
-          service: "marzban",
-          subscriptionId: subscription.id,
-          timestamp: now.toISOString(),
-        }),
-      );
+      logEvent("error", {
+        errorCode: normalizeErrorCode(error),
+        service: "marzban",
+        subscriptionId: subscription.id,
+        timestamp: now.toISOString(),
+      });
     }
   }
 

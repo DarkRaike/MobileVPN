@@ -7,6 +7,7 @@ import type { AuthenticatedUser } from "../../auth/sessions";
 import type { Database } from "../../db/client";
 import { adminAuditLog, supportTickets, users } from "../../db/schema";
 import type { SupportNotifier } from "../../integrations/telegram/support-notifier";
+import { logEvent } from "../../observability/logger";
 import { createAuditRecord } from "../admin/audit";
 
 export type SupportTicketStatus = "in_progress" | "new" | "resolved";
@@ -27,7 +28,7 @@ export interface SupportErrorEvent {
 type SupportErrorLogger = (event: SupportErrorEvent) => void;
 
 const defaultErrorLogger: SupportErrorLogger = (event) => {
-  console.error(JSON.stringify(event));
+  logEvent("error", event);
 };
 
 function ticketStatusSnapshot(ticket: typeof supportTickets.$inferSelect) {

@@ -3,6 +3,15 @@ import { describe, expect, it } from "vitest";
 import { parseRuntimeConfig } from "../../src/lib/server/config/schema";
 
 const SESSION_SECRET = "test-session-secret-with-at-least-32-chars";
+const PRODUCTION_ENVIRONMENT = {
+  BASE_DOMAIN: "astra-vpn.ru",
+  DATABASE_URL: "/data/astra-vpn.sqlite",
+  NODE_ENV: "production",
+  ORIGIN: "https://app.astra-vpn.ru",
+  SESSION_SECRET: "s".repeat(64),
+  TELEGRAM_ADMIN_USER_ID: "123456789",
+  TELEGRAM_BOT_TOKEN: "123456789:test_bot_token_value_123456789",
+} as const;
 
 describe("parseRuntimeConfig", () => {
   it("allows explicit development mock authentication", () => {
@@ -21,11 +30,8 @@ describe("parseRuntimeConfig", () => {
   it("fails closed when mock authentication is enabled in production", () => {
     expect(() =>
       parseRuntimeConfig({
+        ...PRODUCTION_ENVIRONMENT,
         ENABLE_DEV_MOCK_AUTH: "true",
-        NODE_ENV: "production",
-        ORIGIN: "https://app.example.com",
-        SESSION_SECRET,
-        TELEGRAM_ADMIN_USER_ID: "123456789",
       }),
     ).toThrowError(
       expect.objectContaining({
@@ -37,11 +43,8 @@ describe("parseRuntimeConfig", () => {
   it("requires HTTPS origin in production", () => {
     expect(() =>
       parseRuntimeConfig({
-        NODE_ENV: "production",
+        ...PRODUCTION_ENVIRONMENT,
         ORIGIN: "http://app.example.com",
-        SESSION_SECRET,
-        TELEGRAM_ADMIN_USER_ID: "123456789",
-        TELEGRAM_BOT_TOKEN: "123456789:test_bot_token_value_123456789",
       }),
     ).toThrowError(
       expect.objectContaining({
@@ -67,11 +70,8 @@ describe("parseRuntimeConfig", () => {
   it("requires the Telegram administrator in production", () => {
     expect(() =>
       parseRuntimeConfig({
-        ENABLE_DEV_MOCK_AUTH: "false",
-        NODE_ENV: "production",
-        ORIGIN: "https://app.example.com",
-        SESSION_SECRET,
-        TELEGRAM_BOT_TOKEN: "123456789:test_bot_token_value_123456789",
+        ...PRODUCTION_ENVIRONMENT,
+        TELEGRAM_ADMIN_USER_ID: "",
       }),
     ).toThrowError(
       expect.objectContaining({
@@ -83,7 +83,7 @@ describe("parseRuntimeConfig", () => {
   it("requires every provider secret before live operations are enabled", () => {
     expect(() =>
       parseRuntimeConfig({
-        ENABLE_DEV_MOCK_AUTH: "true",
+        ENABLE_DEV_MOCK_AUTH: "false",
         ENABLE_LIVE_OPERATIONS: "true",
         NODE_ENV: "development",
         SESSION_SECRET,
@@ -99,6 +99,25 @@ describe("parseRuntimeConfig", () => {
           "TELEGRAM_BOT_TOKEN",
           "TELEGRAM_WEBHOOK_SECRET",
         ],
+      }),
+    );
+  });
+
+  it("blocks production live operations while evidence gates are pending", () => {
+    expect(() =>
+      parseRuntimeConfig({
+        ...PRODUCTION_ENVIRONMENT,
+        ENABLE_LIVE_OPERATIONS: "true",
+        INTERNAL_JOB_SECRET: "j".repeat(32),
+        MARZBAN_BASE_URL: "http://marzban:8000",
+        MARZBAN_PASSWORD: "marzban-password",
+        MARZBAN_USERNAME: "operator",
+        SUBSCRIPTION_URL_ENCRYPTION_KEY: "e".repeat(43),
+        TELEGRAM_WEBHOOK_SECRET: "w".repeat(32),
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        fields: ["ENABLE_LIVE_OPERATIONS"],
       }),
     );
   });
