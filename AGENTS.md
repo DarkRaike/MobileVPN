@@ -45,7 +45,7 @@
 - Классы использовать только для инкапсуляции состояния или внешнего контракта.
 - Расчёты и преобразования по возможности реализовывать чистыми функциями.
 - Применять DRY к бизнес-правилам, а не к случайно похожим строкам кода.
-- Не удерживать транзакцию SQLite во время запроса к Stripe, Telegram или Marzban.
+- Не удерживать транзакцию SQLite во время запроса к Telegram или Marzban.
 
 ## SvelteKit и Svelte
 
@@ -64,7 +64,7 @@
 ## Валидация и обработка ошибок
 
 - Считать недоверенными все данные браузера и внешних API.
-- Проверять во время выполнения данные Telegram, Stripe, Marzban, форм, URL и переменных окружения.
+- Проверять во время выполнения данные Telegram Stars, Marzban, форм, URL и переменных окружения.
 - Пересчитывать цену, скидку, валюту и срок подписки только на сервере.
 - Использовать стабильные внутренние коды ошибок.
 - Показывать пользователю безопасные и понятные сообщения.
@@ -82,25 +82,25 @@
 - Скрытая кнопка админки не считается защитой.
 - Production-приложение не должно запускаться с тестовой или mock-аутентификацией.
 
-## Платежи Stripe
+## Платежи Telegram Stars
 
-- Использовать Stripe Checkout в режиме одноразового платежа `payment`.
-- Создавать Checkout Session только на сервере через официальный Stripe SDK.
-- Использовать стабильный idempotency key для повторяемых POST-запросов к Stripe.
-- Не выдавать VPN-доступ по клиентскому состоянию или переходу на `success_url`.
-- Проверять `Stripe-Signature` по исходному телу запроса и `STRIPE_WEBHOOK_SECRET`.
-- Не изменять тело webhook до проверки подписи.
-- Исключать повторную обработку по Stripe event ID.
-- До выдачи доступа сверять заказ, сумму, валюту, окружение и статус платежа.
-- Сначала надёжно сохранять webhook, затем запускать Marzban provisioning вне критического пути ответа.
-- Не записывать секреты, Telegram `initData` и Subscription URL в Stripe metadata.
-- Повторный webhook не должен повторно продлевать подписку.
+- Для цифрового VPN-доступа внутри Telegram использовать только одноразовые платежи Telegram Stars с валютой `XTR`.
+- Создавать invoice link только на сервере через Bot API `createInvoiceLink`.
+- Передавать ровно один `LabeledPrice`; цену хранить целым количеством Stars.
+- Использовать непрозрачный локальный payment attempt ID в `invoice_payload` длиной не более 128 байт.
+- Открывать invoice через `Telegram.WebApp.openInvoice()` только по прямому пользовательскому действию.
+- Не выдавать VPN-доступ по callback `openInvoice`, статусу `paid` на клиенте или одному `pre_checkout_query`.
+- Проверять webhook secret header, Telegram user ID, payload, `currency=XTR` и `total_amount`.
+- Отвечать на валидный `pre_checkout_query` через `answerPreCheckoutQuery` не позднее 10 секунд.
+- Выдавать доступ только после серверного `message.successful_payment`.
+- Сохранять `telegram_payment_charge_id` с уникальным ограничением до запуска Marzban provisioning.
+- Возврат выполнять через `refundStarPayment`; повторная обработка не должна повторно возвращать Stars или изменять срок.
 
 ## Интеграция с Marzban
 
 - Обращаться к Marzban только из серверного адаптера по приватной Docker-сети.
 - Не передавать Marzban credentials и внутренние API endpoints в браузер.
-- Создавать или продлевать VPN только после подтверждённого Stripe webhook.
+- Создавать или продлевать VPN только после проверенного Telegram `message.successful_payment`.
 - Обеспечить идемпотентность по локальному ID заказа.
 - Перед повторной попыткой сверять фактическое состояние пользователя Marzban.
 - Использовать таймауты, ограниченное число повторов и backoff.
@@ -148,7 +148,7 @@
 
 - Добавлять тесты для каждого изменённого бизнес-правила и важного ошибочного сценария.
 - Unit-тестами покрывать Telegram validation, скидки, деньги, переходы статусов, даты продления и идемпотентность.
-- Integration-тестами покрывать Drizzle repositories, Stripe webhooks, admin authorization, ошибки Telegram и повторы Marzban.
+- Integration-тестами покрывать Drizzle repositories, Telegram Stars pre-checkout/success/refund updates, admin authorization, ошибки Telegram и повторы Marzban.
 - Критический путь от покупки до выдачи VPN покрыть end-to-end тестом.
 - Тесты должны проверять наблюдаемое поведение, а не внутренние детали реализации.
 - Исправление ошибки должно включать regression test, если это технически возможно.
@@ -177,7 +177,7 @@
 Примеры:
 
 ```text
-feat(payments): add Stripe Checkout
+feat(payments): add Telegram Stars checkout
 fix(webhooks): prevent duplicate provisioning
 test(auth): reject expired Telegram init data
 docs(deploy): document restore procedure

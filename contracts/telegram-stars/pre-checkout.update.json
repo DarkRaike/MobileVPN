@@ -1,0 +1,14 @@
+{
+  "update_id": 700000001,
+  "pre_checkout_query": {
+    "id": "fixture_pre_checkout_query_001",
+    "from": {
+      "id": 7000000012,
+      "is_bot": false,
+      "first_name": "Test"
+    },
+    "currency": "XTR",
+    "total_amount": 249,
+    "invoice_payload": "v1:22222222-2222-4222-8222-222222222222"
+  }
+}

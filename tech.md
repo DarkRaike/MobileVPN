@@ -1,7 +1,7 @@
 # Техническое задание: Telegram Mini App для управления VPN-подписками
 
 **Статус:** Draft  
-**Версия:** 1.0  
+**Версия:** 1.1
 **Дата:** 2026-07-27  
 **Команда:** один разработчик и тимлид  
 **Основной стек:** SvelteKit, TypeScript, Svelte 5, Tailwind CSS, SQLite, Drizzle ORM, Docker  
@@ -54,7 +54,7 @@
 - реферальная программа;
 - автопродление с сохранением банковской карты;
 - полноценная helpdesk-система с перепиской внутри Mini App;
-- бухгалтерская, налоговая или фискальная интеграция до выбора платёжного провайдера;
+- отдельная бухгалтерская система сверх обязательного flow чеков выбранного платёжного провайдера;
 - отдельное мобильное или desktop-приложение администратора;
 - Kubernetes, микросервисы, очереди сообщений и другие инфраструктурные усложнения без подтверждённой нагрузки.
 
@@ -117,22 +117,23 @@
 2. Сервер загружает актуальную цену и срок из базы данных.
 3. Пользователь при необходимости применяет промокод.
 4. Сервер повторно проверяет промокод и рассчитывает итоговую сумму.
-5. Сервер создаёт заказ и Stripe Checkout Session в режиме `payment`.
-6. Пользователь завершает оплату на Stripe-hosted Checkout Page.
-7. Сервер получает и проверяет Stripe webhook.
-8. Платёж переводится в состояние `succeeded` один раз, идемпотентно.
+5. Сервер создаёт заказ и одноразовый invoice link Telegram Stars.
+6. Пользователь открывает invoice через `Telegram.WebApp.openInvoice()` и оплачивает его Stars.
+7. Сервер проверяет `pre_checkout_query` и отвечает через Bot API не позднее 10 секунд.
+8. После проверенного серверного Update с `message.successful_payment` платёж переводится в состояние `succeeded` один раз, идемпотентно.
 9. Фоновая серверная операция создаёт или продлевает пользователя Marzban.
 10. Локальная подписка синхронизируется с Marzban.
 11. В профиле становятся доступны Subscription URL и QR-код.
 
-Успех на клиентской странице возврата не подтверждает оплату. Единственным основанием выдачи доступа является проверенный сервером webhook либо отдельная серверная проверка статуса у провайдера.
+Callback `openInvoice`, включая клиентский статус `paid`, и успешный ответ на `pre_checkout_query` не подтверждают оплату. Единственным обычным основанием выдачи доступа является проверенный сервером Telegram Update с `message.successful_payment`.
 
 ### 6.3. Продление
 
-- Если у пользователя есть активная подписка, срок тарифа прибавляется к текущей дате окончания.
-- Если подписка истекла, срок прибавляется к моменту подтверждения новой покупки.
+- Последовательные покупки разрешены, но суммарный продаваемый горизонт не может превышать 365 дней от момента оплаты.
+- Новая дата рассчитывается как `max(actualMarzbanExpire, localExpire, paidAt) + durationDays`.
 - Операция продления должна быть идемпотентной по идентификатору заказа.
 - Повтор webhook или повторная синхронизация не должны добавлять срок второй раз.
+- Уже оплаченный срок другого заказа нельзя сократить reconciliation или refund одного платежа.
 
 ### 6.4. Обращение в поддержку
 
@@ -195,9 +196,11 @@
 
 Начальный набор:
 
-- 7 дней;
-- 30 дней;
-- 90 дней.
+- 7 дней — 99 Stars;
+- 30 дней — 249 Stars;
+- 90 дней — 599 Stars.
+
+Для всех трёх тарифов трафик безлимитный (`data_limit=0`). До трёх личных устройств — soft policy, а не обещание технического hard limit одновременных подключений.
 
 Карточка тарифа содержит:
 
@@ -265,6 +268,8 @@
 - итоговая сумма не может быть отрицательной;
 - использование учитывается только для успешно оплаченного заказа.
 
+Выбранный промокод можно хранить только в `sessionStorage`; сервер всегда проверяет его заново. Пустой allowlist тарифов означает применимость ко всем активным тарифам.
+
 #### 8.3.2. История покупок
 
 Для каждой покупки отображаются:
@@ -313,7 +318,7 @@ Subscription URL считается секретом доступа:
 - `name`;
 - `description`;
 - `durationDays`, целое число больше 0;
-- `priceMinor`, целое число в минимальных денежных единицах;
+- `priceStars`, целое положительное количество Stars;
 - `currency`, код из поддерживаемого списка;
 - `isActive`;
 - `isFeatured`;
@@ -422,7 +427,7 @@ Bot token хранится только в серверной переменно
 - опциональных уведомлений пользователю о готовности подписки;
 - опциональных уведомлений администратору об ошибках provisioning.
 
-**TBD:** нужен ли отдельный бот для Mini App и уведомлений либо используется один bot token.
+В первой версии используется один bot token для Mini App, обращений и уведомлений. Администратор отвечает пользователю через этот же бот. После успешной выдачи или продления бот отправляет короткое уведомление без Subscription URL.
 
 ## 10. Интеграция с Marzban
 
@@ -469,109 +474,125 @@ QR-код генерируется приложением из Subscription URL 
 
 ### 10.5. Внешний контракт Marzban
 
-Перед реализацией адаптера необходимо зафиксировать:
+Зафиксирован Marzban `v0.8.4`, commit `7f396db3e703d71a28060bc9ce4a532ec64cb1f4` и OCI image index:
 
-- конкретную версию или commit/tag образа Marzban;
-- используемые endpoints и схемы ответов;
-- способ сервисной аутентификации;
-- имя VLESS inbound;
-- правила `flow`, TLS/REALITY и лимита трафика;
-- формат и срок жизни Subscription URL;
-- поведение API при продлении истёкшего пользователя.
+```text
+gozargah/marzban:v0.8.4@sha256:8e422c21997e5d2e3fa231eeff73c0a19193c20fc02fa4958e9368abb9623b8d
+```
 
-Все детали этого пункта имеют статус **TBD** до проверки OpenAPI конкретной развёрнутой версии Marzban.
+OpenAPI snapshot хранится в `contracts/marzban/openapi.v0.8.4.json`; его SHA-256 — `1f38142daa8a4b636ed11b16e9511583df81cc5373db964f88fd94206f1608dc`.
 
-## 11. Платежи через Stripe
+Адаптер использует только:
+
+- `POST /api/admin/token` — OAuth2 password form, получение Bearer token;
+- `GET /api/user/{username}` — чтение фактического состояния перед повтором;
+- `POST /api/user` — создание;
+- `PUT /api/user/{username}` — изменение и продление.
+
+API доступен только во внутренней Docker-сети. Runtime-схемы строятся по зафиксированным `Token`, `UserCreate`, `UserModify` и `UserResponse`. Production docs/OpenAPI отключены.
+
+Выбранная версия требует отдельного SBOM/CVE review образа и bundled Xray перед production из-за возраста релиза. Обновление версии выполняется только вместе с новым snapshot, hash и контрактными тестами.
+
+### 10.6. VLESS/REALITY
+
+Первая версия использует один inbound:
+
+- tag `VLESS_TCP_REALITY_V1`;
+- VLESS + RAW/TCP на 8443;
+- REALITY;
+- flow `xtls-rprx-vision`;
+- `decryption=none`;
+- `data_limit=0`;
+- `data_limit_reset_strategy=no_reset`.
+
+Caddy использует 80/443, поэтому VLESS вынесен на 8443 без port multiplex и custom Caddy modules. Если целевая сеть блокирует 8443, изменение на stream proxy или отдельный IP оформляется отдельным измеренным решением.
+
+REALITY target и `serverNames` выбираются по измерениям с production VPS через `xray tls ping`; target должен поддерживать TLS 1.3, а имя — соответствовать SAN. X25519 private key и случайный 16-символьный hex `shortId` хранятся только в secret storage. Синхронизация времени обязательна. До фиксации target и keys production-запуск запрещён.
+
+## 11. Платежи через Telegram Stars
 
 ### 11.1. Выбранная интеграция
 
-Платёжный провайдер первой версии — **Stripe**. Используется Stripe Checkout в режиме одноразового платежа (`mode: payment`) со Stripe-hosted Checkout Page.
+В первой версии используется только **Telegram Stars**. Для цифровых товаров и услуг внутри Telegram это обязательный способ оплаты. Валюта Bot API — `XTR`, сумма — целое количество Stars. Рекуррентные платежи не используются.
 
-Приложение не собирает и не хранит данные банковских карт. Клиент получает от сервера только URL созданной Checkout Session и открывает его через поддерживаемый Telegram способ внешней навигации. После оплаты Stripe возвращает пользователя на `success_url`, однако возврат на эту страницу не является подтверждением платежа.
+Начальные цены: 7 дней — 99 Stars, 30 дней — 249 Stars, 90 дней — 599 Stars. Это самостоятельные продуктовые цены без runtime-конвертации из рублей.
 
-До production launch необходимо подтвердить:
+Внешний эквайринг и оплата вне Telegram не входят в первую версию. Их нельзя добавлять через недоделанную универсальную абстракцию: будущий провайдер требует отдельного решения, юридической проверки и контрактных тестов.
 
-- доступность Stripe для страны регистрации бизнеса и банковского счёта;
-- прохождение Stripe account verification;
-- допустимость VPN-сервиса правилами Stripe для конкретной страны и аккаунта;
-- поддерживаемые валюты, минимальные суммы и способы оплаты;
-- налоги, чеки, фискализацию и политику возвратов;
-- фактическое поведение Stripe Checkout при открытии из поддерживаемых Telegram WebView.
+### 11.2. Создание invoice link
 
-Эти вопросы остаются **TBD** и проверяются с Stripe и профильным специалистом до приёма реальных платежей.
+1. Сервер повторно загружает тариф, проверяет промокод и рассчитывает итоговое целое количество Stars.
+2. Сервер создаёт локальный заказ и payment attempt со статусом `pending`.
+3. `invoice_payload` имеет формат `v1:<payment-attempt-uuid>`, содержит только непрозрачный идентификатор и занимает не более 128 байт.
+4. Сервер вызывает Bot API `createInvoiceLink` с `currency=XTR`, пустым `provider_token` и ровно одним `LabeledPrice`.
+5. Не запрашиваются имя, телефон, email, адрес, доставка и tips.
+6. Клиент получает invoice URL и открывает его через `Telegram.WebApp.openInvoice()` только по прямому пользовательскому действию.
 
-### 11.2. Создание Checkout Session
+Callback `openInvoice` со статусами `paid`, `cancelled`, `failed` или `pending` используется только для UI. Даже `paid` на клиенте не является основанием выдачи доступа.
 
-1. Сервер повторно загружает тариф и проверяет промокод.
-2. Сервер создаёт локальный заказ со статусом `pending_payment`.
-3. Сервер создаёт Stripe Checkout Session через официальный Stripe Node SDK.
-4. В Stripe передаются вычисленные сервером сумма и валюта.
-5. В `client_reference_id` передаётся непрозрачный ID локального заказа.
-6. В `metadata` допускаются только минимальные несекретные идентификаторы: `orderId` и внутренний `userId`.
-7. Для POST-запроса к Stripe используется стабильный idempotency key, связанный с одной попыткой создания Checkout Session.
-8. Локально сохраняются `stripeCheckoutSessionId`, `stripePaymentIntentId`, если доступен, и срок действия сессии.
-
-Нельзя передавать в Stripe metadata:
+Нельзя включать в title, description или payload:
 
 - Telegram `initData`;
-- bot token;
+- bot token и webhook secret;
 - Subscription URL;
 - данные доступа Marzban;
-- полное содержимое обращения в поддержку;
-- другие секреты или лишние персональные данные.
+- персональные данные;
+- текст обращения в поддержку.
 
-Повторное нажатие кнопки оплаты для того же открытого заказа возвращает существующую действующую Checkout Session либо создаёт новую контролируемую попытку после истечения предыдущей. Оно не создаёт несколько локальных заказов без явной необходимости.
+### 11.3. Telegram webhook и pre-checkout
 
-### 11.3. Webhook Stripe
+Endpoint: `POST /api/telegram/webhook`.
 
-Endpoint: `POST /api/payments/stripe/webhook`.
+Webhook настраивается через `setWebhook` с `secret_token`. Каждый запрос проверяет заголовок `X-Telegram-Bot-Api-Secret-Token` constant-time сравнением с `TELEGRAM_WEBHOOK_SECRET`. Тело ограничивается 64 KiB, `update_id` дедуплицируется, разрешённые типы включают минимум `message` и `pre_checkout_query`.
 
-Обязательные требования:
+На `pre_checkout_query` Bot API требует ответить не позднее 10 секунд. Внутренний deadline — 8 секунд. До `answerPreCheckoutQuery(ok=true)` сервер сверяет:
 
-- использовать исходные байты тела запроса без предварительного JSON-преобразования;
-- получить заголовок `Stripe-Signature`;
-- проверить подпись официальным Stripe SDK и `STRIPE_WEBHOOK_SECRET`;
-- отклонить запрос при неверной подписи или недопустимой временной метке;
-- сохранить Stripe event ID с уникальным ограничением;
-- обрабатывать одно событие не более одного раза;
-- отвечать `2xx` только после надёжного сохранения принятого события;
-- выполнять длительный Marzban provisioning вне критического пути webhook;
-- не полагаться на порядок доставки событий.
+- `from.id` с Telegram user ID владельца заказа;
+- `invoice_payload` с открытым payment attempt;
+- `currency=XTR`;
+- `total_amount` со snapshot заказа;
+- что заказ не оплачен, не отменён и ещё может быть выдан;
+- максимальный горизонт подписки 365 дней.
 
-Минимально обрабатываемые события:
+При расхождении отправляется `ok=false` с безопасным пользовательским сообщением. SQLite-транзакция не удерживается во время вызова Bot API. Успешный ответ на pre-checkout разрешает продолжить оплату, но не подтверждает её.
 
-- `checkout.session.completed`;
-- `checkout.session.async_payment_succeeded`, если включены асинхронные методы;
-- `checkout.session.async_payment_failed`, если включены асинхронные методы;
-- `payment_intent.payment_failed`;
-- `charge.refunded` или соответствующее событие возврата, выбранное после фиксации refund flow.
+### 11.4. Подтверждение и reconciliation
 
-Для выдачи VPN проверяются как минимум:
+Единственный обычный источник подтверждения — серверный Update с `message.successful_payment`.
 
-- объект относится к ожидаемому Stripe account и live/test mode;
-- `client_reference_id`/metadata соответствует существующему заказу;
-- валюта и фактически уплаченная сумма совпадают с локальным заказом;
-- платёж имеет подтверждённый Stripe-статус;
-- заказ ещё не был применён к подписке.
+Перед переходом платежа в `succeeded` проверяются:
 
-Если данные расходятся, доступ не выдаётся, событие сохраняется для расследования, а администратор получает безопасный сигнал об ошибке.
+- webhook secret;
+- `message.from.id`;
+- `invoice_payload`;
+- `currency=XTR`;
+- `total_amount`;
+- непустой `telegram_payment_charge_id`;
+- отсутствие ранее обработанного `update_id` и charge ID;
+- заказ ещё не применён к подписке.
 
-### 11.4. Серверный Stripe-адаптер
+Payment event, charge ID и переход заказа сохраняются транзакционно до запуска Marzban provisioning. Webhook получает `2xx` после надёжного сохранения; provisioning выполняется вне критического пути. Повтор Update не продлевает доступ повторно.
 
-Stripe SDK и secret key доступны только в `$lib/server`. Достаточно небольшого конкретного адаптера без универсальной фабрики провайдеров:
+Для восстановления пропущенных событий используется `getStarTransactions`: сверяются transaction ID, `source.invoice_payload`, пользователь и amount. Telegram хранит непринятые updates не более 24 часов, поэтому reconciliation и мониторинг обязательны.
+
+### 11.5. Серверный Telegram Stars-адаптер
+
+Bot token доступен только в `$lib/server`. Нужен небольшой конкретный адаптер:
 
 ```ts
-interface StripePayments {
-  createCheckoutSession(input: CreateCheckoutInput): Promise<CheckoutSession>;
-  verifyWebhook(rawBody: string, signature: string): VerifiedStripeEvent;
-  retrieveCheckoutSession(sessionId: string): Promise<CheckoutSession>;
-  refundPayment(input: RefundPaymentInput): Promise<RefundResult>;
+interface TelegramStarsPayments {
+  createInvoiceLink(input: CreateStarsInvoiceInput): Promise<string>;
+  answerPreCheckout(input: AnswerPreCheckoutInput): Promise<void>;
+  refundPayment(input: RefundStarsPaymentInput): Promise<void>;
+  getTransactions(input: GetStarTransactionsInput): Promise<StarTransactionPage>;
 }
 ```
 
-Метод возврата реализуется только после фиксации продуктовой политики возвратов. Версия Stripe API фиксируется явно и обновляется контролируемо после проверки changelog и тестов.
+Полный возврат выполняется серверным `refundStarPayment` по Telegram user ID и `telegram_payment_charge_id`. Операция имеет состояния `refund_requested`, `refund_pending`, `refunded`/`refund_failed`, сохраняет безопасное evidence и идемпотентна по payment ID. Частичный возврат не поддерживается. После подтверждённого возврата отзывается только срок, выданный этим заказом.
 
-### 11.5. Состояния
+Бот обязан предоставлять `/terms` и `/paysupport`; пользователь подтверждает условия до создания invoice. Владелец бота отвечает за споры и своевременную поддержку. Юридический и налоговый режим Stars подтверждается профильным специалистом до production.
+
+### 11.6. Состояния
 
 Заказ:
 
@@ -591,16 +612,16 @@ interface StripePayments {
 - `cancelled`;
 - `refunded`.
 
-Переходы выполняются только разрешёнными серверными командами. Webhook с уже обработанным внешним event ID возвращает успешный ответ без повторного применения.
+Переходы выполняются только разрешёнными серверными командами. Повтор webhook, successful payment или reconciliation возвращает успешный результат без повторного применения.
 
-### 11.6. Денежные значения
+### 11.7. Денежные значения
 
-- Хранить только целые значения в минимальных денежных единицах: копейки, центы и т. п.
-- Не использовать `number` с дробной частью для денежных расчётов.
-- Валюта сохраняется вместе с каждой суммой.
+- Хранить только целое количество Stars.
+- Валюта каждого заказа и платежа — `XTR`.
+- Не конвертировать RUB, USD или стоимость покупки Stars в цену тарифа во время запроса.
 - Заказ хранит snapshot названия тарифа, срока, цены и скидки.
 - Итог пересчитывается сервером.
-- Значения Stripe `amount_total`, `amount_subtotal` и currency сверяются с локальным заказом перед provisioning.
+- Значения `SuccessfulPayment.total_amount`, `currency`, `invoice_payload`, Telegram user ID и charge ID сверяются с локальным заказом перед provisioning.
 
 ## 12. Архитектура приложения
 
@@ -703,13 +724,13 @@ src/
 - `name`;
 - `description` — nullable;
 - `durationDays`;
-- `priceMinor`;
+- `priceStars`;
 - `currency`;
 - `isActive`;
 - `isFeatured`;
 - `sortOrder`.
 
-Ограничения: `durationDays > 0`, `priceMinor >= 0`, один рекомендуемый активный тариф — по решению продукта.
+Ограничения: `durationDays > 0`, `priceStars > 0`, `currency = 'XTR'`, один рекомендуемый активный тариф — по решению продукта.
 
 ### 13.4. `promo_codes`
 
@@ -733,9 +754,9 @@ src/
 - `planId`;
 - `promoCodeId` — nullable;
 - snapshot полей тарифа;
-- `subtotalMinor`;
-- `discountMinor`;
-- `totalMinor`;
+- `subtotalStars`;
+- `discountStars`;
+- `totalStars`;
 - `currency`;
 - `status`;
 - `provisioningStatus`;
@@ -748,12 +769,11 @@ src/
 
 - `id` — UUID, PK;
 - `orderId`;
-- `provider` — константа `stripe` в первой версии;
-- `stripeCheckoutSessionId` — unique;
-- `stripePaymentIntentId` — nullable, unique;
-- `stripeChargeId` — nullable, unique;
+- `provider` — константа `telegram_stars` в первой версии;
+- `invoicePayload` — unique, `v1:<payment-attempt-uuid>`;
+- `telegramPaymentChargeId` — nullable, unique;
 - `status`;
-- `amountMinor`;
+- `amountStars`;
 - `currency`;
 - `paidAt` — nullable;
 - `refundedAt` — nullable;
@@ -761,8 +781,8 @@ src/
 
 ### 13.7. `payment_events`
 
-- `provider` — `stripe`;
-- `externalEventId` — Stripe event ID;
+- `provider` — `telegram_stars`;
+- `externalEventId` — строковое представление Telegram `update_id`;
 - `eventType`;
 - `receivedAt`;
 - `processedAt` — nullable;
@@ -770,7 +790,22 @@ src/
 
 Уникальный индекс `(provider, externalEventId)`.
 
-### 13.8. `subscriptions`
+### 13.8. `refunds`
+
+- `id` — UUID, PK;
+- `paymentId`;
+- `amountStars`;
+- `currency`;
+- `status`;
+- `reasonCode`;
+- `providerEvidenceSafe` — nullable;
+- `requestedAt`;
+- `confirmedAt` — nullable;
+- `failedAt` — nullable.
+
+Один подтверждённый полный refund на платёж защищается уникальным индексом. Provider evidence не содержит payer details, секреты или Subscription URL.
+
+### 13.9. `subscriptions`
 
 - `id` — UUID, PK;
 - `userId` — unique;
@@ -782,7 +817,7 @@ src/
 - `lastSyncedAt`;
 - `version` — optimistic locking.
 
-### 13.9. `order_provisioning`
+### 13.10. `order_provisioning`
 
 - `orderId` — unique;
 - `appliedDurationDays`;
@@ -792,7 +827,7 @@ src/
 - `nextAttemptAt` — nullable;
 - `lastErrorCode` — nullable.
 
-### 13.10. `faq_items`
+### 13.11. `faq_items`
 
 - `id` — UUID, PK;
 - `question`;
@@ -800,7 +835,7 @@ src/
 - `sortOrder`;
 - `isPublished`.
 
-### 13.11. `support_tickets`
+### 13.12. `support_tickets`
 
 - `id` — UUID, PK;
 - `publicNumber` — unique;
@@ -812,7 +847,7 @@ src/
 - `telegramMessageId` — nullable;
 - `resolvedAt` — nullable.
 
-### 13.12. `admin_audit_log`
+### 13.13. `admin_audit_log`
 
 - `id`;
 - `adminUserId`;
@@ -842,7 +877,7 @@ SQLite подходит для первой версии и одного экз�
 
 Ожидаемый Docker Compose:
 
-- `reverse-proxy` — Caddy, Traefik или Nginx;
+- `reverse-proxy` — Caddy;
 - `app` — SvelteKit Node server;
 - `worker` — тот же image с процессом обработки provisioning/retry либо безопасный периодический runner;
 - `marzban`;
@@ -852,13 +887,28 @@ SQLite подходит для первой версии и одного экз�
 
 ### 15.2. Сети и порты
 
-- Публично открываются только необходимые порты: HTTPS и VLESS inbound.
-- Marzban admin/API доступен только по внутренней сети, VPN, SSH tunnel либо allowlist.
-- SQLite-файлы приложения и данные Marzban находятся в разных volumes.
-- Reverse proxy завершает TLS и передаёт корректные proxy headers.
-- Для webhook используется отдельный HTTPS endpoint.
+Доменные роли:
 
-**TBD:** домены/поддомены, DNS, reverse proxy и точная схема портов.
+- `app.{baseDomain}` — Mini App, legal pages и `POST /api/telegram/webhook`;
+- `sub.{baseDomain}` — только Marzban `/sub/*`;
+- `vpn.{baseDomain}` — VLESS/REALITY.
+
+Конкретный принадлежащий проекту `baseDomain` задаётся production-конфигурацией и обязателен для запуска. Публичного admin-домена нет.
+
+Порты:
+
+- 80/443 — Caddy и HTTPS;
+- 8443/TCP — `VLESS_TCP_REALITY_V1`;
+- 22 — SSH только по operator IP allowlist;
+- 3000, 8000 и 2019 — только приватная Docker-сеть.
+
+На subscription host пути `/api/*`, `/dashboard/*`, `/docs` и `/openapi.json` отвечают `404`. Access log этого host отключён, чтобы subscription token не сохранялся. Marzban admin доступен только через SSH tunnel. SQLite-файлы приложения и данные Marzban находятся в разных volumes.
+
+Caddy image фиксируется:
+
+```text
+caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+```
 
 ### 15.3. Ресурсы
 
@@ -870,20 +920,26 @@ SQLite подходит для первой версии и одного экз�
 
 ### 15.4. Резервное копирование
 
-Ежедневно резервируются:
+Ежечасно резервируются:
 
-- SQLite приложения согласованным способом;
+- SQLite приложения и Marzban через Online Backup API или `.backup`, а не копированием живого WAL-файла;
 - migrations и конфигурация развертывания;
 - данные Marzban согласно официальной документации;
 - необходимые ключи и конфигурация Xray в зашифрованном виде.
 
 Требования:
 
-- хранение минимум одной копии вне сервера;
-- шифрование backup;
-- политика хранения **TBD**;
-- тест восстановления до production launch и затем минимум раз в квартал;
-- документированный RPO/RTO — **TBD**.
+- restic repository у другого provider, account и region;
+- шифрование backup, ключ хранится вне VPS;
+- Object Lock governance минимум 7 дней, если поддерживается storage;
+- retention: hourly 48 часов, daily 30 дней, weekly 12 недель, максимум 84 дня;
+- `PRAGMA integrity_check`, `PRAGMA foreign_key_check` и SHA-256 manifest;
+- alert при отсутствии успешной копии более 65 минут;
+- test restore до production launch и затем минимум раз в квартал в чистом одноразовом окружении;
+- RPO не более 60 минут, RTO не более 4 часов;
+- restore поверх live volume запрещён.
+
+Полная процедура находится в `docs/operations/backup-restore.md`.
 
 ## 16. Безопасность
 
@@ -910,7 +966,7 @@ SQLite подходит для первой версии и одного экз�
 - Telegram bot token;
 - session secret/key;
 - Marzban credentials;
-- payment API key и webhook secret;
+- Telegram webhook secret;
 - ключ шифрования Subscription URL;
 - приватные ключи Xray/REALITY.
 
@@ -925,16 +981,23 @@ SQLite подходит для первой версии и одного экз�
 
 ### 16.3. Персональные данные
 
-Хранить только данные, необходимые для работы сервиса. До запуска определить:
+Хранить только данные, необходимые для работы сервиса. Операционные сроки:
 
-- юрисдикцию;
-- политику конфиденциальности;
-- срок хранения пользователей, заказов, платежей, обращений и audit log;
-- порядок удаления/анонимизации;
-- требования к чекам и возвратам;
-- законность предоставления и рекламы VPN-сервиса в целевых странах.
+- active session: 7 дней absolute и 24 часа idle;
+- revoked/expired session: 30 дней;
+- пользователь без покупок: удалить после 12 месяцев неактивности;
+- direct Telegram identifiers пользователя с покупками: анонимизировать после 24 месяцев неактивности, если закон не требует дольше;
+- Subscription URL: активная подписка плюс 30 дней;
+- expired Marzban user: 30 дней;
+- support body: 180 дней после закрытия;
+- support delivery metadata и admin audit log: 1 год;
+- redacted application/security logs: 30 дней;
+- Xray error log: 7 дней, access log отключён;
+- backup: не более 84 дней.
 
-Эти вопросы имеют статус **TBD** и требуют консультации профильного специалиста.
+Ежедневная purge job идемпотентна, обрабатывает bounded batches и соблюдает legal hold. Срок хранения заказов, платежей, refund и чеков устанавливается утверждённым юридическим и бухгалтерским schedule до production.
+
+До production профильный специалист подтверждает юрисдикцию, оферту, privacy/refund policy, фискализацию, обработку персональных данных и законность предоставления/рекламы VPN в целевых странах. Эти подтверждения являются fail-closed production gates, а не неявными предположениями реализации.
 
 ## 17. Переменные окружения
 
@@ -946,6 +1009,7 @@ ORIGIN=
 DATABASE_URL=
 
 TELEGRAM_BOT_TOKEN=
+TELEGRAM_WEBHOOK_SECRET=
 TELEGRAM_ADMIN_USER_ID=
 TELEGRAM_INIT_DATA_MAX_AGE_SECONDS=300
 
@@ -955,17 +1019,17 @@ SUBSCRIPTION_URL_ENCRYPTION_KEY=
 MARZBAN_BASE_URL=
 MARZBAN_USERNAME=
 MARZBAN_PASSWORD=
-MARZBAN_VLESS_INBOUND_TAG=
+MARZBAN_VLESS_INBOUND_TAG=VLESS_TCP_REALITY_V1
 
-STRIPE_SECRET_KEY=
-STRIPE_WEBHOOK_SECRET=
-STRIPE_PUBLISHABLE_KEY=
-STRIPE_API_VERSION=
+BASE_DOMAIN=
+
+RESTIC_REPOSITORY=
+RESTIC_PASSWORD_FILE=
 
 LOG_LEVEL=info
 ```
 
-`STRIPE_PUBLISHABLE_KEY` требуется только если выбранный Checkout flow использует клиентскую Stripe-библиотеку; при простом redirect на URL Checkout Session она может не понадобиться. Имена Marzban-переменных уточняются после фиксации внешнего контракта. Приложение валидирует env при старте, проверяет соответствие test/live ключей окружению и завершает запуск при отсутствии обязательной production-конфигурации.
+`TELEGRAM_WEBHOOK_SECRET` генерируется отдельно от bot token, передаётся в `setWebhook.secret_token` и проверяется по заголовку каждого Update. Приложение валидирует env при старте и завершает production-запуск, если отсутствуют обязательные секреты или evidence gates.
 
 ## 18. Нефункциональные требования
 
@@ -1009,7 +1073,7 @@ Provisioning и платежи не подчиняются этим значен
 - Telegram Desktop;
 - обычный браузер с диагностическим сообщением при запуске вне Telegram.
 
-Точная матрица версий — **TBD** перед релизом.
+Минимальная требуемая Telegram WebApp API version — 6.1. Перед каждым production release в evidence record фиксируются фактически проверенные актуальные версии iOS, Android и Desktop; непроверенный клиентский набор блокирует release.
 
 ## 19. Логирование, мониторинг и аудит
 
@@ -1067,7 +1131,7 @@ Provisioning и платежи не подчиняются этим значен
 - Drizzle repositories на временной SQLite базе с migrations;
 - транзакционное применение промокода;
 - создание заказа;
-- подтверждение webhook;
+- Telegram Stars pre-checkout, successful payment, refund и `getStarTransactions` reconciliation;
 - provisioning с mock Marzban API;
 - повтор provisioning после частичного сбоя;
 - проверка admin authorization;
@@ -1088,7 +1152,7 @@ Provisioning и платежи не подчиняются этим значен
 
 - поддельный Telegram `initData`;
 - клиент подменяет цену;
-- повторный webhook;
+- повторный webhook и повторный status reconciliation;
 - обычный пользователь открывает admin URL;
 - Marzban недоступен после успешной оплаты;
 - использованный или истёкший промокод;
@@ -1135,13 +1199,13 @@ Form actions дают типизированный серверный POST, ед
 
 ### 22.1. Обязательные инженерные правила
 
-Единым источником обязательных требований к реализации является соседний файл [`AGENTS.md`](./AGENTS.md). Codex читает его перед началом работы. Файл определяет правила архитектуры, SvelteKit/Svelte, аутентификации, Stripe, Marzban, SQLite, безопасности, тестирования, комментариев и Git.
+Единым источником обязательных требований к реализации является соседний файл [`AGENTS.md`](./AGENTS.md). Codex читает его перед началом работы. Файл определяет правила архитектуры, SvelteKit/Svelte, аутентификации, Telegram Stars, Marzban, SQLite, безопасности, тестирования, комментариев и Git.
 
 Ключевые ограничения:
 
 - TypeScript strict mode;
 - доверенные операции и authorization только на сервере;
-- Stripe webhook и Marzban provisioning должны быть идемпотентными;
+- Telegram Stars updates/reconciliation и Marzban provisioning должны быть идемпотентными;
 - комментарии и Conventional Commits — краткие и на английском языке;
 - автор коммитов — `DarkRaike <danikzhurik64@gmail.com>`;
 - format, lint, type check, tests, build и migration checks обязательны перед merge;
@@ -1173,14 +1237,14 @@ Form actions дают типизированный серверный POST, ед
 
 ### Этап 0. Фиксация внешних решений
 
-- Stripe account/country eligibility, валюта, способы оплаты и Checkout flow;
+- Telegram Stars, валюта XTR, pre-checkout, successful payment и refund flow;
 - домены и reverse proxy;
 - Marzban version и OpenAPI;
 - VLESS/TLS/REALITY конфигурация;
 - валюта, возвраты и юридические требования;
 - политика хранения данных и backup.
 
-Результат: закрыты блокирующие TBD и добавлены контрактные тесты.
+**Статус: завершён.** Архитектурные TBD закрыты решениями из `contracts/stage-0.decisions.json`; факты, требующие владельца домена, production bot/VPS или специалиста, оформлены как fail-closed evidence gates. Добавлены Telegram Stars fixtures, точный Marzban OpenAPI snapshot, контрактные тесты, backup runbook и CI без CD/staging.
 
 ### Этап 1. Основа приложения
 
@@ -1248,8 +1312,8 @@ Form actions дают типизированный серверный POST, ед
 ### 24.4. Платёж и подписка
 
 - Доступ не выдаётся по одному клиентскому redirect.
-- Проверенный успешный webhook запускает provisioning.
-- Повтор того же webhook не добавляет срок повторно.
+- Только проверенный `message.successful_payment` с полной сверкой запускает provisioning.
+- Повтор Update, charge ID или `getStarTransactions` reconciliation не добавляет срок повторно.
 - После успешного provisioning видны корректные QR и Subscription URL.
 - При недоступности Marzban платёж сохраняется, заказ получает retryable status.
 - После восстановления Marzban заказ можно завершить без повторной оплаты.
@@ -1283,22 +1347,27 @@ Form actions дают типизированный серверный POST, ед
 - пользовательская и эксплуатационная документация обновлена;
 - изменение прошло ревью тимлида для критичных областей.
 
-## 26. Открытые вопросы и TBD
+## 26. Production gates
 
-Блокируют production launch:
+Архитектурных TBD этапа 0 нет. Production launch блокируется конкретными проверяемыми evidence gates:
 
-1. **Stripe production readiness:** страна и аккаунт, допустимость VPN-сервиса, валюта, способы оплаты, комиссии, возвраты, налоги/чеки и live webhook.
-2. **Юрисдикция**, правила продажи VPN, privacy policy, retention и фискализация.
-3. **Версия Marzban**, OpenAPI contract, authentication и VLESS inbound.
-4. **Xray transport/security:** TCP/gRPC/WebSocket, TLS или REALITY, flow, домен и сертификаты.
-5. **Лимит трафика:** безлимит либо quota для каждого тарифа.
-6. **Домены**, DNS, reverse proxy и публичный доступ к Marzban admin.
-7. **Продление:** разрешено ли несколько последовательных покупок и есть ли максимальный срок.
-8. **Промокод:** можно ли сохранять выбранный код между сессиями и можно ли применять его ко всем тарифам по умолчанию.
-9. **Поддержка:** достаточно ли одностороннего уведомления администратору или нужен ответ пользователю через бота.
-10. **Уведомления:** отправлять ли пользователю сообщение после успешной выдачи/продления.
-11. **Политика backup:** RPO, RTO, срок хранения и место внешней копии.
-12. **Целевые Telegram clients** и минимальные поддерживаемые версии.
+1. **Base domain/DNS:** передан принадлежащий проекту домен, настроены три host role и проверен HTTPS.
+2. **Telegram webhook:** `setWebhook.secret_token` установлен и заголовок проверен негативным тестом.
+3. **Stars live smoke:** выполнены контролируемые invoice, pre-checkout, successful payment и полный refund без отдельного staging.
+4. **Bot owner security:** для Telegram-аккаунта владельца включена двухэтапная аутентификация.
+5. **Terms/support:** работают `/terms` и `/paysupport`, согласие с условиями требуется до invoice.
+6. **Merchant/legal status:** выбран и проверен статус самозанятого, ИП или организации.
+7. **Tax/accounting review:** подтверждён учёт поступлений и вывода Telegram Stars, включая необходимость чеков.
+8. **Legal review:** утверждены оферта, privacy/refund policy, законность VPN и schedule хранения платёжных документов.
+9. **REALITY target:** target измерен с production VPS, подтверждены TLS 1.3 и SAN.
+10. **REALITY secrets:** X25519 keys и short ID находятся в secret storage, проверены rotation/recovery.
+11. **Marzban security:** зафиксированы SBOM/CVE scan Marzban image и bundled Xray.
+12. **Offsite backup:** подтверждена зашифрованная копия у другого provider/account/region.
+13. **Restore drill:** восстановление прошло в чистом окружении в пределах RPO/RTO.
+14. **Telegram smoke:** проверены актуальные Telegram iOS, Android и Desktop; требуемая WebApp API version не ниже 6.1.
+15. **Team lead review:** проверены payment, Marzban, security, backup и legal evidence.
+
+До закрытия всех gates `productionReady=false`, реальные платежи и выдача реального доступа выключены.
 
 Не блокируют начало разработки:
 
@@ -1316,11 +1385,16 @@ Form actions дают типизированный серверный POST, ед
 - SvelteKit authentication: <https://svelte.dev/docs/kit/auth>
 - SvelteKit private environment variables: <https://svelte.dev/docs/kit/$env-static-private>
 - Marzban: введение и возможности REST API: <https://gozargah.github.io/marzban/en/docs/introduction>
-- Marzban configuration и API docs: <https://gozargah.github.io/marzban/en/docs/configuration>
+- Marzban v0.8.4: <https://github.com/Gozargah/Marzban/releases/tag/v0.8.4>
+- Marzban API docs: <https://gozargah.github.io/marzban/en/docs/api>
 - Marzban core/VLESS settings: <https://gozargah.github.io/marzban/en/docs/core-settings>
-- Stripe Checkout: <https://docs.stripe.com/payments/checkout>
-- Stripe webhook и проверка подписи: <https://docs.stripe.com/webhooks>
-- Stripe idempotent requests: <https://docs.stripe.com/api/idempotent_requests>
-- Stripe prohibited and restricted businesses: <https://stripe.com/legal/restricted-businesses>
+- Telegram Stars для цифровых товаров и услуг: <https://core.telegram.org/bots/payments-stars>
+- Telegram Bot API 10.2: <https://core.telegram.org/bots/api>
+- Telegram Mini App `openInvoice`: <https://core.telegram.org/bots/webapps>
+- Telegram Stars refunds: <https://core.telegram.org/bots/api#refundstarpayment>
+- Xray REALITY: <https://xtls.github.io/en/config/transports/reality.html>
+- SQLite Online Backup API: <https://www.sqlite.org/backup.html>
+- SQLite WAL: <https://www.sqlite.org/wal.html>
+- restic encryption: <https://restic.readthedocs.io/en/stable/070_encryption.html>
 
-Перед реализацией внешних адаптеров ссылки необходимо сверить с зафиксированными версиями Telegram Bot API, SvelteKit, Stripe API и Marzban.
+Перед обновлением внешних адаптеров ссылки необходимо сверить с зафиксированными версиями Telegram Bot API, SvelteKit и Marzban.

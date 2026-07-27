@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#151616">
+  <title>Astra VPN</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            app: "#151616",
+            card: "#202121",
+            card2: "#242525",
+            blue: "#4d96ff",
+            muted: "#8b8d91"
+          },
+          fontFamily: {
+            sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"]
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      background: #e8eaec;
+      overscroll-behavior: none;
+    }
+
+    body {
+      overflow: hidden;
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .app {
+      position: relative;
+      width: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      background: #151616;
+    }
+
+    .track {
+      display: flex;
+      width: 300%;
+      height: 100%;
+      transform: translate3d(-33.333333%, 0, 0);
+      transition: transform 420ms cubic-bezier(.22, .8, .25, 1);
+      touch-action: pan-y;
+      will-change: transform;
+    }
+
+    .track.dragging {
+      transition: none;
+    }
+
+    .screen {
+      width: 33.333333%;
+      height: 100%;
+      overflow-y: auto;
+      padding: calc(18px + var(--safe-top)) 18px calc(114px + var(--safe-bottom));
+      scrollbar-width: none;
+    }
+
+    .screen::-webkit-scrollbar {
+      display: none;
+    }
+
+    .surface {
+      background: #202121;
+      border: 1px solid rgba(255, 255, 255, .018);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .018);
+    }
+
+    .soft-button {
+      background: rgba(255, 255, 255, .028);
+      border: 1px solid rgba(255, 255, 255, .02);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .02);
+    }
+
+    .header-pill {
+      background: rgba(31, 32, 32, .92);
+      border: 1px solid rgba(255, 255, 255, .025);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, .11);
+    }
+
+    .hero-grid {
+      background-color: #202121;
+      background-image:
+        linear-gradient(45deg, rgba(255, 255, 255, .025) 25%, transparent 25%),
+        linear-gradient(-45deg, rgba(255, 255, 255, .025) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, .025) 75%),
+        linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, .025) 75%);
+      background-size: 42px 42px;
+      background-position: 0 0, 0 21px, 21px -21px, -21px 0;
+    }
+
+    .connect-orb {
+      background: rgba(77, 150, 255, .1);
+      border: 2px solid rgba(77, 150, 255, .5);
+      box-shadow: 0 0 0 10px rgba(77, 150, 255, .035);
+      transition: background 220ms ease, box-shadow 220ms ease, transform 180ms ease;
+    }
+
+    .connect-orb:active {
+      transform: scale(.97);
+    }
+
+    body[data-connected="true"] .connect-orb {
+      background: #4d96ff;
+      box-shadow: 0 0 0 10px rgba(77, 150, 255, .07), 0 16px 40px rgba(77, 150, 255, .22);
+    }
+
+    body[data-connected="true"] .connection-state {
+      color: #4d96ff;
+    }
+
+    body[data-connected="true"] .connection-dot {
+      background: #4d96ff;
+      box-shadow: 0 0 10px rgba(77, 150, 255, .8);
+    }
+
+    .metric-bars {
+      display: flex;
+      gap: 3px;
+      height: 10px;
+    }
+
+    .metric-bars span {
+      flex: 1;
+      min-width: 3px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, .055);
+    }
+
+    .metric-bars span.on {
+      background: #4d96ff;
+    }
+
+    .metric-bars.orange span.on {
+      background: #ff764b;
+    }
+
+    .tariff {
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 21px;
+      background: #202121;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .025);
+      transition: border-color 180ms ease, background 180ms ease;
+    }
+
+    .tariff.open {
+      border-color: rgba(255, 255, 255, .08);
+      background: #202121;
+    }
+
+    .tariff-details {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 250ms ease;
+    }
+
+    .tariff.open .tariff-details {
+      grid-template-rows: 1fr;
+    }
+
+    .tariff-chevron {
+      transition: transform 250ms ease;
+    }
+
+    .tariff.open .tariff-chevron {
+      transform: rotate(180deg);
+    }
+
+    .faq-answer {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 250ms ease;
+    }
+
+    .faq.open .faq-answer {
+      grid-template-rows: 1fr;
+    }
+
+    .faq svg {
+      transition: transform 250ms ease;
+    }
+
+    .faq.open .faq-chevron {
+      transform: rotate(90deg);
+    }
+
+    .glass-nav {
+      position: absolute;
+      z-index: 30;
+      left: 44px;
+      right: 44px;
+      bottom: calc(12px + var(--safe-bottom));
+      padding: 3px;
+      border: 1px solid rgba(255, 255, 255, .1);
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(110, 112, 114, .24), rgba(43, 44, 45, .16));
+      box-shadow: 0 14px 34px rgba(0, 0, 0, .24), inset 0 1px 0 rgba(255, 255, 255, .1);
+      backdrop-filter: blur(34px) saturate(180%);
+      -webkit-backdrop-filter: blur(34px) saturate(180%);
+    }
+
+    .nav-indicator {
+      position: absolute;
+      top: 3px;
+      bottom: 3px;
+      left: 3px;
+      width: calc((100% - 6px) / 3);
+      border-radius: 17px;
+      background: rgba(255, 255, 255, .06);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+      transition: transform 400ms cubic-bezier(.22, .8, .25, 1);
+    }
+
+    .nav-item {
+      position: relative;
+      z-index: 1;
+      color: rgba(255, 255, 255, .42);
+      transition: color 220ms ease;
+    }
+
+    .nav-item.active {
+      color: #67a5ff;
+    }
+
+    .toast {
+      position: absolute;
+      z-index: 50;
+      left: 50%;
+      top: calc(16px + var(--safe-top));
+      max-width: calc(100% - 36px);
+      padding: 12px 18px;
+      border: 1px solid rgba(255, 255, 255, .06);
+      border-radius: 15px;
+      background: rgba(46, 47, 48, .94);
+      box-shadow: 0 18px 45px rgba(0, 0, 0, .3);
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, -14px);
+      transition: opacity 200ms ease, transform 200ms ease;
+      backdrop-filter: blur(18px);
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    @media (min-width: 520px) {
+      body {
+        display: grid;
+        place-items: center;
+        padding: 18px;
+      }
+
+      .app {
+        width: 430px;
+        height: min(900px, calc(100dvh - 36px));
+        border: 9px solid #090909;
+        border-radius: 52px;
+        box-shadow: 0 35px 100px rgba(0, 0, 0, .32), inset 0 0 0 1px rgba(255, 255, 255, .12);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        transition-duration: .01ms !important;
+        animation-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+<body class="font-sans text-white antialiased">
+  <main class="app" id="app">
+    <div class="track" id="track">
+      <!-- Поддержка -->
+      <section class="screen" aria-label="Поддержка">
+        <header class="mb-6 flex items-center justify-between">
+          <div class="flex min-w-0 items-center gap-3">
+            <div class="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#2c6880] to-[#152d38] text-sm font-bold">A</div>
+            <div class="min-w-0">
+              <p class="text-sm text-muted">Помощь</p>
+              <h1 class="truncate text-[22px] font-semibold">Поддержка</h1>
+            </div>
+          </div>
+          <div class="header-pill flex rounded-[22px] p-1">
+            <button class="relative grid h-11 w-11 place-items-center text-blue" type="button" aria-label="Чат">
+              <svg viewBox="0 0 24 24" class="h-5 w-5 fill-none stroke-current" stroke-width="1.8"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z"/><path d="M8 9h8m-8 4h5"/></svg>
+              <span class="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-[#ff5d5d]"></span>
+            </button>
+            <span class="my-2 w-px bg-white/[.05]"></span>
+            <button class="grid h-11 w-11 place-items-center text-blue" type="button" aria-label="Настройки">
+              <svg viewBox="0 0 24 24" class="h-5 w-5 fill-none stroke-current" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l-2.83 2.83a1.7 1.7 0 0 0-1.88-.34A1.7 1.7 0 0 0 14 20.92V21h-4v-.08A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.88.34l-2.83-2.83A1.7 1.7 0 0 0 4.63 15 1.7 1.7 0 0 0 3.08 14H3v-4h.08A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.88l2.83-2.83A1.7 1.7 0 0 0 9 4.63 1.7 1.7 0 0 0 10 3.08V3h4v.08A1.7 1.7 0 0 0 15 4.63a1.7 1.7 0 0 0 1.88-.34l2.83 2.83A1.7 1.7 0 0 0 19.37 9 1.7 1.7 0 0 0 20.92 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15Z"/></svg>
+            </button>
+          </div>
+        </header>
+
+        <h2 class="mb-3 text-[21px] font-semibold">Мы на связи</h2>
+        <div class="surface mb-5 overflow-hidden rounded-[27px]">
+          <div class="flex items-center gap-3 p-4">
+            <div class="grid h-14 w-14 place-items-center rounded-[18px] bg-blue/10 text-blue">
+              <svg viewBox="0 0 24 24" class="h-7 w-7 fill-none stroke-current" stroke-width="1.8"><path d="M4 13v-2a8 8 0 0 1 16 0v2"/><path d="M6 17H5a2 2 0 0 1-2-2v-1a2 2 0 0 1 2-2h1v5Zm12 0h1a2 2 0 0 0 2-2v-1a2 2 0 0 0-2-2h-1v5Z"/><path d="M18 17c0 2-2 3-4 3"/></svg>
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="font-semibold">Оператор онлайн</p>
+              <p class="mt-1 text-sm text-muted">Ответим примерно за 10 минут</p>
+            </div>
+            <span class="h-3 w-3 rounded-full bg-blue shadow-[0_0_13px_rgba(77,150,255,.7)]"></span>
+          </div>
+          <div class="flex items-center justify-between border-t border-white/[.035] px-5 py-3 text-sm text-muted">
+            <span>Каждый день</span>
+            <span>24/7</span>
+          </div>
+        </div>
+
+        <div class="mb-3 flex items-center justify-between">
+          <h2 class="text-[21px] font-semibold">Частые вопросы</h2>
+          <span class="text-sm text-muted">FAQ</span>
+        </div>
+        <div class="mb-5 space-y-2.5">
+          <article class="faq surface rounded-[22px]">
+            <button class="faq-toggle flex w-full items-center gap-3 p-4 text-left" type="button" aria-expanded="false">
+              <span class="grid h-10 w-10 shrink-0 place-items-center rounded-[14px] bg-blue/10 text-blue">
+                <svg viewBox="0 0 24 24" class="h-5 w-5 fill-none stroke-current" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg>
+              </span>
+              <span class="flex-1 font-medium">Как подключить VPN?</span>
+              <svg viewBox="0 0 24 24" class="faq-chevron h-5 w-5 fill-none stroke-white/35" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+            <div class="faq-answer"><div class="overflow-hidden"><p class="px-4 pb-4 pl-[68px] text-sm leading-6 text-muted">Откройте профиль, скопируйте ссылку или отсканируйте QR-код в приложении с поддержкой VLESS.</p></div></div>
+          </article>
+          <article class="faq surface rounded-[22px]">
+            <button class="faq-toggle flex w-full items-center gap-3 p-4 text-left" type="button" aria-expanded="false">
+              <span class="grid h-10 w-10 shrink-0 place-items-center rounded-[14px] bg-blue/10 text-blue">
+                <svg viewBox="0 0 24 24" class="h-5 w-5 fill-none stroke-current" stroke-width="1.8"><rect x="5" y="2" width="14" height="20" rx="3"/><path d="M9 18h6"/></svg>
+              </span>
+              <span class="flex-1 font-medium">Сколько устройств?</span>
+              <svg viewBox="0 0 24 24" class="faq-chevron h-5 w-5 fill-none stroke-white/35" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+            <div class="faq-answer"><div class="overflow-hidden"><p class="px-4 pb-4 pl-[68px] text-sm leading-6 text-muted">Одну подписку можно использовать одновременно на трёх личных устройствах.</p></div></div>
+          </article>
+          <article class="faq surface rounded-[22px]">
+            <button class="faq-toggle flex w-full items-center gap-3 p-4 text-left" type="button" aria-expanded="false">
+              <span class="grid h-10 w-10 shrink-0 place-items-center rounded-[14px] bg-blue/10 text-blue">
+                <svg viewBox="0 0 24 24" class="h-5 w-5 fill-none stroke-current" stroke-width="1.8"><path d="M4 4h16v16H4z"/><path d="m4 9 8 5 8-5"/></svg>
+              </span>
+              <span class="flex-1 font-medium">Нет соединения</span>
+              <svg viewBox="0 0 24 24" class="faq-chevron h-5 w-5 fill-none stroke-white/35" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+            <div class="faq-answer"><div class="overflow-hidden"><p class="px-4 pb-4 pl-[68px] text-sm leading-6 text-muted">Смените сеть, обновите конфигурацию и перезапустите клиент. Если не помогло — напишите нам.</p></div></div>
+          </article>
+        </div>
+
+        <h2 class="mb-1 text-[21px] font-semibold">Новое обращение</h2>
+        <p class="mb-3 text-sm text-muted">Ответ придёт в Telegram</p>
+        <form id="supportForm" class="surface space-y-3 rounded-[27px] p-4">
+          <select required class="w-full appearance-none rounded-[16px] border border-white/[.035] bg-[#2b2c2c] px-4 py-3.5 text-sm text-white outline-none focus:border-blue/60">
+            <option value="">Выберите тему</option>
+            <option>Проблема с подключением</option>
+            <option>Оплата и подписка</option>
+            <option>Другое</option>
+          </select>
+          <textarea required minlength="10" rows="4" placeholder="Опишите проблему" class="w-full resize-none rounded-[16px] border border-white/[.035] bg-[#2b2c2c] px-4 py-3.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-blue/60"></textarea>
+          <button class="w-full rounded-[16px] bg-blue px-4 py-3.5 font-semibold text-white transition active:scale-[.985]" type="submit">Отправить обращение</button>
+        </form>
+      </section>
+
+      <!-- Главная -->
+      <section class="screen" aria-label="Главная">
+        <header class="mb-5 flex items-center justify-between">
+          <div class="flex min-w-0 items-center gap-3">
+            <div class="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#2c6880] to-[#152d38] text-sm font-bold">ДЖ</div>
+            <div class="min-w-0">
+              <h1 class="truncate text-[20px] font-semibold">Даниил</h1>
+            </div>
+          </div>
+          <div class="header-pill flex rounded-[22px] p-1">
+            <button class="relative grid h-11 w-11 place-items-center text-blue" type="button" aria-label="Уведомления">
+              <svg viewBox="0 0 24 24" class="h-5 w-5 fill-none stroke-current" stroke-width="1.8"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/></svg>
+              <span class="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-[#ff5d5d]"></span>
+            </button>
+            <span class="my-2 w-px bg-white/[.05]"></span>
+            <button class="grid h-11 w-11 place-items-center text-blue" type="button" aria-label="Настройки">
+              <svg viewBox="0 0 24 24" class="h-5 w-5 fill-none stroke-current" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l-2.83 2.83a1.7 1.7 0 0 0-1.88-.34A1.7 1.7 0 0 0 14 20.92V21h-4v-.08A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.88.34l-2.83-2.83A1.7 1.7 0 0 0 4.63 15 1.7 1.7 0 0 0 3.08 14H3v-4h.08A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.88l2.83-2.83A1.7 1.7 0 0 0 9 4.63 1.7 1.7 0 0 0 10 3.08V3h4v.08A1.7 1.7 0 0 0 15 4.63a1.7 1.7 0 0 0 1.88-.34l2.83 2.83A1.7 1.7 0 0 0 19.37 9 1.7 1.7 0 0 0 20.92 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15Z"/></svg>
+            </button>
+          </div>
+        </header>
+
+        <button id="serverCard" class="surface mb-3 flex w-full items-center gap-3 rounded-[22px] p-3.5 text-left transition active:scale-[.99]" type="button">
+          <span class="grid h-[50px] w-[50px] shrink-0 place-items-center rounded-[16px] bg-[#2b2c2c] text-[23px]" aria-hidden="true">🇩🇪</span>
+          <span class="min-w-0 flex-1">
+            <span class="mb-1 block text-xs font-medium uppercase tracking-[.12em] text-muted">Выбранный сервер</span>
+            <span class="block truncate text-[17px] font-semibold">Германия · Франкфурт</span>
+            <span class="mt-0.5 block text-xs text-muted">VLESS · 42 мс</span>
+          </span>
+          <svg viewBox="0 0 24 24" class="h-6 w-6 shrink-0 fill-none stroke-white/35" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+
+        <article class="surface mb-3 rounded-[24px] px-4 pb-4 pt-4 text-center">
+          <div class="mb-5 flex items-center justify-between gap-3 text-left">
+            <h2 id="connectionTitle" class="min-w-0 text-[20px] font-semibold leading-tight">Защита выключена</h2>
+            <span id="connectionState" class="connection-state flex shrink-0 items-center gap-2 rounded-full bg-white/[.04] px-3 py-2 text-[10px] font-semibold tracking-[.06em] text-muted">
+              <span class="connection-dot h-2.5 w-2.5 rounded-full bg-white/20"></span>
+              НЕ АКТИВНА
+            </span>
+          </div>
+          <button id="connectHero" class="connect-orb mx-auto grid h-[84px] w-[84px] place-items-center rounded-full text-blue" type="button" aria-label="Запустить VPN">
+            <svg viewBox="0 0 24 24" class="h-9 w-9 fill-none stroke-current" stroke-width="1.65"><path d="M12 2v10"/><path d="M7.2 5.8a8 8 0 1 0 9.6 0"/></svg>
+          </button>
+          <p id="connectionAction" class="mt-4 text-[18px] font-semibold">Запустить VPN</p>
+          <p id="connectionHint" class="mt-0.5 text-xs text-muted">Нажмите, чтобы подключиться</p>
+        </article>
+
+        <div class="mb-5 grid grid-cols-3 gap-2.5">
+          <button class="surface rounded-[19px] px-2 py-4 text-center transition active:scale-95" type="button" data-go="2">
+            <svg viewBox="0 0 24 24" class="mx-auto mb-2.5 h-7 w-7 fill-none stroke-blue" stroke-width="1.8"><path d="M4 4h6v6H4zm10 0h6v6h-6zM4 14h6v6H4zm11 0h2v2h-2zm3 0h2v6h-6v-2"/></svg>
+            <span class="text-sm font-semibold text-white/70">QR-код</span>
+          </button>
+          <button class="surface rounded-[19px] px-2 py-4 text-center transition active:scale-95" type="button" data-scroll-plans>
+            <svg viewBox="0 0 24 24" class="mx-auto mb-2.5 h-7 w-7 fill-none stroke-blue" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18m-14 5h4"/></svg>
+            <span class="text-sm font-semibold text-white/70">Тарифы</span>
+          </button>
+          <button class="surface rounded-[19px] px-2 py-4 text-center transition active:scale-95" type="button" data-go="0">
+            <svg viewBox="0 0 24 24" class="mx-auto mb-2.5 h-7 w-7 fill-none stroke-blue" stroke-width="1.8"><path d="M4 13v-2a8 8 0 0 1 16 0v2"/><path d="M6 17H5a2 2 0 0 1-2-2v-1a2 2 0 0 1 2-2h1v5Zm12 0h1a2 2 0 0 0 2-2v-1a2 2 0 0 0-2-2h-1v5Z"/></svg>
+            <span class="text-sm font-semibold text-white/70">Помощь</span>
+          </button>
+        </div>
+
+        <div class="mb-5 grid grid-cols-2 gap-2.5">
+          <article class="surface rounded-[21px] p-3.5">
+            <div class="mb-3 flex items-center justify-between">
+              <span class="text-sm font-semibold">Скорость</span>
+              <svg viewBox="0 0 24 24" class="h-5 w-5 fill-none stroke-white/50" stroke-width="1.8"><path d="M4 14a8 8 0 1 1 16 0"/><path d="m12 14 4-5"/><circle cx="12" cy="14" r="1"/></svg>
+            </div>
+            <p class="text-[21px] font-semibold">842 Мбит</p>
+            <p class="mb-3 text-xs text-muted">сейчас</p>
+            <div class="metric-bars"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span></span><span></span><span></span><span></span></div>
+          </article>
+          <article class="surface rounded-[21px] p-3.5">
+            <div class="mb-3 flex items-center justify-between">
+              <span class="text-sm font-semibold">Сервер</span>
+              <svg viewBox="0 0 24 24" class="h-5 w-5 fill-none stroke-white/50" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+            </div>
+            <p class="text-[21px] font-semibold">12 стран</p>
+            <p class="mb-3 text-xs text-muted">автовыбор</p>
+            <div class="metric-bars orange"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span><span></span><span></span><span></span><span></span><span></span></div>
+          </article>
+        </div>
+
+        <div id="plansTitle" class="mb-2.5 flex items-center justify-between">
+          <h2 class="text-[21px] font-semibold">Тарифы</h2>
+          <span class="text-xs text-muted">до 3 устройств</span>
+        </div>
+        <div class="space-y-2.5">
+          <article class="tariff" data-days="7" data-price="99">
+            <div class="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 gap-y-[5px] px-3.5 pb-[5px] pt-3.5">
+              <button class="tariff-toggle min-w-0 text-left" type="button" aria-expanded="false">
+                <span class="text-[19px] font-semibold">7 дней</span>
+              </button>
+              <span class="whitespace-nowrap text-[19px] font-semibold text-white">99 ₽</span>
+              <button class="tariff-buy min-w-[92px] rounded-[14px] bg-white px-4 py-3 text-sm font-semibold text-app transition active:scale-95" type="button">Купить</button>
+              <button class="tariff-toggle col-span-3 flex h-5 items-center justify-center text-white/45" type="button" aria-label="Показать подробности">
+                <svg viewBox="0 0 24 24" class="tariff-chevron h-5 w-5 fill-none stroke-current" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+            </div>
+            <div class="tariff-details">
+              <div class="overflow-hidden">
+                <ul class="space-y-2 border-t border-white/[.04] px-4 py-3 text-sm text-white/65">
+                  <li>Безлимитный трафик</li>
+                  <li>До 3 устройств</li>
+                  <li>Все доступные серверы</li>
+                </ul>
+              </div>
+            </div>
+          </article>
+
+          <article class="tariff open" data-days="30" data-price="249">
+            <div class="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 gap-y-[5px] px-3.5 pb-[5px] pt-3.5">
+              <button class="tariff-toggle min-w-0 text-left" type="button" aria-expanded="true">
+                <span class="text-[19px] font-semibold">30 дней</span>
+              </button>
+              <span class="whitespace-nowrap text-[19px] font-semibold text-white">249 ₽</span>
+              <button class="tariff-buy min-w-[92px] rounded-[14px] bg-white px-4 py-3 text-sm font-semibold text-app transition active:scale-95" type="button">Купить</button>
+              <button class="tariff-toggle col-span-3 flex h-5 items-center justify-center text-white/45" type="button" aria-label="Скрыть подробности">
+                <svg viewBox="0 0 24 24" class="tariff-chevron h-5 w-5 fill-none stroke-current" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+            </div>
+            <div class="tariff-details">
+              <div class="overflow-hidden">
+                <ul class="space-y-2 border-t border-white/[.04] px-4 py-3 text-sm text-white/65">
+                  <li>Безлимитный трафик</li>
+                  <li>До 3 устройств одновременно</li>
+                  <li>12 быстрых локаций</li>
+                  <li>Современное шифрование VLESS</li>
+                </ul>
+              </div>
+            </div>
+          </article>
+
+          <article class="tariff" data-days="90" data-price="599">
+            <div class="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 gap-y-[5px] px-3.5 pb-[5px] pt-3.5">
+              <button class="tariff-toggle min-w-0 text-left" type="button" aria-expanded="false">
+                <span class="text-[19px] font-semibold">90 дней</span>
+              </button>
+              <span class="whitespace-nowrap text-[19px] font-semibold text-white">599 ₽</span>
+              <button class="tariff-buy min-w-[92px] rounded-[14px] bg-white px-4 py-3 text-sm font-semibold text-app transition active:scale-95" type="button">Купить</button>
+              <button class="tariff-toggle col-span-3 flex h-5 items-center justify-center text-white/45" type="button" aria-label="Показать подробности">
+                <svg viewBox="0 0 24 24" class="tariff-chevron h-5 w-5 fill-none stroke-current" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+            </div>
+            <div class="tariff-details">
+              <div class="overflow-hidden">
+                <ul class="space-y-2 border-t border-white/[.04] px-4 py-3 text-sm text-white/65">
+                  <li>Безлимитный трафик</li>
+                  <li>До 3 устройств одновременно</li>
+                  <li>Все серверы и приоритетная поддержка</li>
+                  <li>Максимальная выгода за день</li>
+                </ul>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- Профиль -->
+      <section class="screen" aria-label="Профиль">
+        <header class="mb-5">
+          <h1 class="text-[30px] font-semibold tracking-[-.03em]">Профиль</h1>
+        </header>
+
+        <div class="mb-6 flex items-center gap-3.5">
+          <div class="relative grid h-14 w-14 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#34708b] to-[#152d38] text-base font-bold">
+            ДЖ
+            <span class="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-[3px] border-app bg-blue"></span>
+          </div>
+          <div class="min-w-0">
+            <h2 class="truncate text-[19px] font-semibold">Даниил Журик</h2>
+            <p class="mt-0.5 truncate text-sm text-muted">@darkraike</p>
+          </div>
+        </div>
+
+        <p class="mb-2.5 text-[11px] font-semibold uppercase tracking-[.12em] text-muted">Подписка</p>
+
+        <article class="surface mb-6 rounded-[25px] p-4">
+          <div class="mb-2 flex items-center justify-between">
+            <h3 class="text-[20px] font-semibold">30 дней</h3>
+            <span class="flex items-center gap-2 text-xs font-medium text-white/70">
+              <span class="h-2.5 w-2.5 rounded-full bg-blue"></span>
+              Активен
+            </span>
+          </div>
+          <p class="text-sm text-muted">Осталось 12 дней · до 8 августа</p>
+          <div class="mb-5 mt-3 h-1.5 overflow-hidden rounded-full bg-white/[.07]">
+            <div class="h-full w-[40%] rounded-full bg-blue"></div>
+          </div>
+
+          <div class="mx-auto grid h-[154px] w-[154px] grid-cols-7 gap-1.5 rounded-[18px] bg-white p-4" aria-label="QR-код">
+            <span class="col-span-3 row-span-3 border-[7px] border-app"></span><span class="bg-app"></span><span class="col-span-3 row-span-3 border-[7px] border-app"></span>
+            <span class="bg-app"></span><span></span><span class="bg-app"></span><span class="bg-app"></span>
+            <span></span><span class="bg-app"></span><span></span><span class="bg-app"></span>
+            <span class="col-span-3 row-span-3 border-[7px] border-app"></span><span class="bg-app"></span><span></span><span class="bg-app"></span><span></span>
+            <span class="bg-app"></span><span></span><span class="bg-app"></span><span class="bg-app"></span>
+            <span></span><span class="bg-app"></span><span></span><span class="bg-app"></span>
+          </div>
+          <p class="mb-4 mt-3 text-center text-xs text-muted">Отсканируйте в приложении</p>
+
+          <button id="copyLink" class="flex w-full items-center gap-3 rounded-[15px] bg-white/[.045] px-3.5 py-3 text-left" type="button">
+            <span class="min-w-0 flex-1 truncate text-xs text-muted">vless://astra-vpn/sub/danik-30-days</span>
+            <svg viewBox="0 0 24 24" class="h-5 w-5 shrink-0 fill-none stroke-white/55" stroke-width="1.8"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
+          </button>
+
+          <div class="mt-2.5 grid grid-cols-2 gap-2.5">
+            <button class="rounded-[15px] bg-white/[.055] px-3 py-3 text-sm font-semibold transition active:scale-[.98]" type="button">Продлить</button>
+            <button class="rounded-[15px] bg-white/[.055] px-3 py-3 text-sm font-semibold transition active:scale-[.98]" type="button">Как настроить</button>
+          </div>
+        </article>
+
+        <h2 class="mb-2.5 text-[11px] font-semibold uppercase tracking-[.12em] text-muted">Промокод</h2>
+        <form id="promoForm" class="mb-6 flex gap-2">
+          <input required maxlength="20" autocomplete="off" placeholder="Введите код" class="min-w-0 flex-1 rounded-[15px] bg-card px-4 py-3 text-sm uppercase text-white placeholder:normal-case placeholder:text-muted outline-none">
+          <button class="rounded-[15px] bg-white px-4 py-3 text-sm font-semibold text-app" type="submit">Применить</button>
+        </form>
+
+        <div class="mb-3 flex items-center justify-between">
+          <h2 class="text-[11px] font-semibold uppercase tracking-[.12em] text-muted">История покупок</h2>
+          <button class="text-sm text-blue" type="button">Все</button>
+        </div>
+        <div class="surface rounded-[27px] p-4">
+          <div class="mb-4 flex items-center gap-3">
+            <span class="grid h-11 w-11 place-items-center rounded-full bg-blue/10 text-blue">
+              <svg viewBox="0 0 24 24" class="h-5 w-5 fill-none stroke-current" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18"/></svg>
+            </span>
+            <div class="min-w-0 flex-1"><p class="font-semibold">Комфорт · 30 дней</p><p class="text-sm text-muted">27 июля 2026</p></div>
+            <div class="text-right"><p class="font-semibold">249 ₽</p><p class="text-sm text-muted">Оплачено</p></div>
+          </div>
+          <div class="mb-4 flex items-center gap-3">
+            <span class="grid h-11 w-11 place-items-center rounded-full bg-white/[.045] text-white/50">
+              <svg viewBox="0 0 24 24" class="h-5 w-5 fill-none stroke-current" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18"/></svg>
+            </span>
+            <div class="min-w-0 flex-1"><p class="font-semibold">Старт · 7 дней</p><p class="text-sm text-muted">10 июля 2026</p></div>
+            <div class="text-right"><p class="font-semibold">99 ₽</p><p class="text-sm text-muted">Завершён</p></div>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="grid h-11 w-11 place-items-center rounded-full bg-white/[.045] text-white/50">
+              <svg viewBox="0 0 24 24" class="h-5 w-5 fill-none stroke-current" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18"/></svg>
+            </span>
+            <div class="min-w-0 flex-1"><p class="font-semibold">Выгода · 90 дней</p><p class="text-sm text-muted">3 апреля 2026</p></div>
+            <div class="text-right"><p class="font-semibold">599 ₽</p><p class="text-sm text-muted">Завершён</p></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <nav class="glass-nav" aria-label="Основная навигация">
+      <span class="nav-indicator" id="navIndicator" aria-hidden="true"></span>
+      <div class="relative grid grid-cols-3">
+        <button class="nav-item flex flex-col items-center gap-0.5 rounded-[17px] py-1" type="button" data-index="0">
+          <svg viewBox="0 0 24 24" class="h-6 w-6 fill-none stroke-current" stroke-width="1.9"><path d="M4 13v-2a8 8 0 0 1 16 0v2"/><path d="M6 17H5a2 2 0 0 1-2-2v-1a2 2 0 0 1 2-2h1v5Zm12 0h1a2 2 0 0 0 2-2v-1a2 2 0 0 0-2-2h-1v5Z"/></svg>
+          <span class="text-[10px] font-medium">Поддержка</span>
+        </button>
+        <button class="nav-item active flex flex-col items-center gap-0.5 rounded-[17px] py-1" type="button" data-index="1" aria-current="page">
+          <svg viewBox="0 0 24 24" class="h-6 w-6 fill-none stroke-current" stroke-width="1.9"><path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9Z"/></svg>
+          <span class="text-[10px] font-medium">Главная</span>
+        </button>
+        <button class="nav-item flex flex-col items-center gap-0.5 rounded-[17px] py-1" type="button" data-index="2">
+          <svg viewBox="0 0 24 24" class="h-6 w-6 fill-none stroke-current" stroke-width="1.9"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+          <span class="text-[10px] font-medium">Профиль</span>
+        </button>
+      </div>
+    </nav>
+
+    <div class="toast" id="toast" role="status"></div>
+  </main>
+
+  <script>
+    (() => {
+      const track = document.getElementById("track");
+      const app = document.getElementById("app");
+      const navItems = [...document.querySelectorAll(".nav-item")];
+      const navIndicator = document.getElementById("navIndicator");
+      const toast = document.getElementById("toast");
+      let index = 1;
+      let startX = 0;
+      let startY = 0;
+      let deltaX = 0;
+      let dragging = false;
+      let toastTimer;
+
+      function showToast(message) {
+        clearTimeout(toastTimer);
+        toast.textContent = message;
+        toast.classList.add("show");
+        toastTimer = setTimeout(() => toast.classList.remove("show"), 2200);
+      }
+
+      function goTo(nextIndex) {
+        index = Math.max(0, Math.min(2, nextIndex));
+        track.style.transform = `translate3d(${-index * 33.333333}%, 0, 0)`;
+        navIndicator.style.transform = `translateX(${index * 100}%)`;
+        navItems.forEach((item, itemIndex) => {
+          const active = itemIndex === index;
+          item.classList.toggle("active", active);
+          if (active) item.setAttribute("aria-current", "page");
+          else item.removeAttribute("aria-current");
+        });
+      }
+
+      navItems.forEach((item) => item.addEventListener("click", () => goTo(Number(item.dataset.index))));
+      document.querySelectorAll("[data-go]").forEach((button) => button.addEventListener("click", () => goTo(Number(button.dataset.go))));
+
+      track.addEventListener("pointerdown", (event) => {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        track.setPointerCapture?.(event.pointerId);
+        startX = event.clientX;
+        startY = event.clientY;
+        deltaX = 0;
+        dragging = true;
+      });
+
+      track.addEventListener("pointermove", (event) => {
+        if (!dragging) return;
+        const moveX = event.clientX - startX;
+        const moveY = event.clientY - startY;
+        if (Math.abs(moveY) > Math.abs(moveX)) return;
+        deltaX = moveX;
+        if ((index === 0 && deltaX > 0) || (index === 2 && deltaX < 0)) deltaX *= .25;
+        track.classList.add("dragging");
+        track.style.transform = `translate3d(${-index * app.clientWidth + deltaX}px, 0, 0)`;
+      });
+
+      function endSwipe() {
+        if (!dragging) return;
+        dragging = false;
+        track.classList.remove("dragging");
+        const threshold = Math.min(70, app.clientWidth * .18);
+        if (Math.abs(deltaX) > threshold) goTo(index + (deltaX < 0 ? 1 : -1));
+        else goTo(index);
+        deltaX = 0;
+      }
+
+      track.addEventListener("pointerup", endSwipe);
+      track.addEventListener("pointercancel", endSwipe);
+
+      document.querySelectorAll(".faq-toggle").forEach((button) => {
+        button.addEventListener("click", () => {
+          const faq = button.closest(".faq");
+          const open = faq.classList.toggle("open");
+          button.setAttribute("aria-expanded", String(open));
+        });
+      });
+
+      document.querySelectorAll(".tariff-toggle").forEach((button) => {
+        button.addEventListener("click", () => {
+          const tariff = button.closest(".tariff");
+          const open = tariff.classList.toggle("open");
+          tariff.querySelectorAll(".tariff-toggle").forEach((toggle) => toggle.setAttribute("aria-expanded", String(open)));
+        });
+      });
+
+      document.querySelectorAll(".tariff-buy").forEach((button) => {
+        button.addEventListener("click", () => {
+          const tariff = button.closest(".tariff");
+          showToast(`Выбран тариф: ${tariff.dataset.days} дней за ${tariff.dataset.price} ₽`);
+        });
+      });
+
+      function toggleConnection() {
+        const connected = document.body.dataset.connected === "true";
+        const nextConnected = !connected;
+        document.body.dataset.connected = String(nextConnected);
+        document.getElementById("connectionTitle").textContent = nextConnected ? "Соединение защищено" : "Защита выключена";
+        document.getElementById("connectionState").lastChild.textContent = nextConnected ? " АКТИВНА" : " НЕ АКТИВНА";
+        document.getElementById("connectionAction").textContent = nextConnected ? "Отключить VPN" : "Запустить VPN";
+        document.getElementById("connectionHint").textContent = nextConnected ? "Германия · Франкфурт" : "Нажмите, чтобы подключиться";
+        showToast(nextConnected ? "VPN подключён" : "VPN отключён");
+      }
+
+      document.getElementById("connectHero").addEventListener("click", toggleConnection);
+      document.getElementById("serverCard").addEventListener("click", () => showToast("Открыт выбор сервера"));
+
+      document.querySelector("[data-scroll-plans]").addEventListener("click", () => {
+        document.getElementById("plansTitle").scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+
+      document.getElementById("supportForm").addEventListener("submit", (event) => {
+        event.preventDefault();
+        event.currentTarget.reset();
+        showToast("Обращение отправлено");
+      });
+
+      document.getElementById("promoForm").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const input = event.currentTarget.querySelector("input");
+        showToast(`Промокод ${input.value.toUpperCase()} применён`);
+        event.currentTarget.reset();
+      });
+
+      document.getElementById("copyLink").addEventListener("click", async () => {
+        const link = "vless://demo-user@vpn.example.com:443?security=tls&type=ws#Astra-VPN";
+        try {
+          await navigator.clipboard.writeText(link);
+          showToast("Ссылка скопирована");
+        } catch {
+          showToast("Не удалось скопировать ссылку");
+        }
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowLeft") goTo(index - 1);
+        if (event.key === "ArrowRight") goTo(index + 1);
+      });
+
+      window.addEventListener("resize", () => goTo(index));
+      goTo(1);
+    })();
+  </script>
+</body>
+</html>

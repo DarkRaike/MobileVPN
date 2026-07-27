@@ -1,0 +1,13 @@
+{
+  "title": "Astra VPN — 30 дней",
+  "description": "VPN-доступ без лимита трафика на 30 дней",
+  "payload": "v1:22222222-2222-4222-8222-222222222222",
+  "provider_token": "",
+  "currency": "XTR",
+  "prices": [
+    {
+      "label": "30 дней",
+      "amount": 249
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "update_id": 700000003,
+  "message": {
+    "message_id": 78,
+    "from": {
+      "id": 7000000012,
+      "is_bot": false,
+      "first_name": "Test"
+    },
+    "chat": {
+      "id": 7000000012,
+      "type": "private",
+      "first_name": "Test"
+    },
+    "date": 1785146590,
+    "refunded_payment": {
+      "currency": "XTR",
+      "total_amount": 249,
+      "invoice_payload": "v1:22222222-2222-4222-8222-222222222222",
+      "telegram_payment_charge_id": "fixture_stars_charge_001",
+      "provider_payment_charge_id": ""
+    }
+  }
+}
