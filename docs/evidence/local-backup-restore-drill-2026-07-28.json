@@ -1,0 +1,11 @@
+{
+  "databaseCount": 2,
+  "drillType": "local_ephemeral_automation",
+  "executedAt": "2026-07-27T22:23:00Z",
+  "integrityChecks": ["ok", "ok"],
+  "notProductionEvidence": true,
+  "operationsImage": "astra-vpn-operations:stage4",
+  "releaseVersion": "local-drill",
+  "status": "passed",
+  "withinObjectives": true
+}

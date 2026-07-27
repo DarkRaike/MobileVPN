@@ -8,7 +8,9 @@ Telegram Mini App для покупки и управления VPN-доступ
 
 - Node.js `>=24.11.0 <25`;
 - npm, поставляемый с Node.js;
-- Docker Engine с Docker Compose — для контейнерной разработки.
+- Docker Engine с Docker Compose — для контейнерной разработки и operations
+  drill;
+- Python 3 — для локальных backup/restore regression tests.
 
 ## Локальный запуск
 
@@ -57,9 +59,9 @@ docker compose run --rm app npm run db:seed
 docker compose up --build
 ```
 
-Compose автоматически применяет миграции перед запуском Vite. Исходный код
+Приложение идемпотентно применяет миграции при старте. Исходный код
 монтируется в контейнер, `node_modules` и SQLite хранятся в отдельных Docker
-volumes. Healthcheck доступен по `/healthz`.
+volumes. Liveness доступен по `/healthz`, readiness — по `/readyz`.
 
 Остановить окружение без удаления данных:
 
@@ -169,5 +171,13 @@ npm run check
 ```
 
 Он выполняет Prettier check, ESLint, Svelte/TypeScript check, contract, unit и
-integration tests, проверку миграций, production build и сборку Stage 0
-contract bundle.
+integration/operations tests, проверку миграций, production build и сборку
+Stage 0 contract bundle. Браузерный critical path запускается отдельно:
+
+```powershell
+npx playwright install chromium
+npm run test:e2e
+```
+
+Production Compose, backup/restore, monitoring, Telegram smoke и release/
+rollback процедуры находятся в [docs/operations](docs/operations).
