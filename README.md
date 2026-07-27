@@ -115,6 +115,8 @@ Stars. Повторный запуск не меняет существующи�
 - управлять промокодами и их allowlist тарифов;
 - создавать, редактировать, публиковать и удалять FAQ;
 - фильтровать обращения и менять их статус;
+- просматривать заказы, платежи и состояние provisioning;
+- ставить оплаченный заказ с ошибкой в очередь на безопасный повтор;
 - просматривать журнал административных действий.
 
 Каждая admin mutation повторно проверяет права на сервере. Изменения каталога и
@@ -126,8 +128,37 @@ Telegram-сообщения: безопасные метаданные и пол
 
 Цвета синхронизируются с Telegram ThemeParams; предусмотрены fallback для
 светлой/тёмной темы, отсутствующего `backdrop-filter` и reduced motion.
-Платежи, VPN provisioning, история покупок, QR-код и Subscription URL относятся
-к этапу 3 и в текущем интерфейсе не имитируются.
+
+## Платежи и VPN
+
+Покупка выполняется одноразовым invoice Telegram Stars (`XTR`). Счёт создаётся
+на сервере, а VPN-доступ выдаётся только после проверенного
+`message.successful_payment`. Клиентский callback `openInvoice` используется
+только для обратной связи и не меняет статус платежа или подписки.
+
+Provisioning worker идемпотентно создаёт или продлевает пользователя Marzban,
+проверяя его фактическое состояние перед изменением. После выдачи профиль
+показывает историю покупок, активный срок, Subscription URL и сгенерированный
+на сервере QR-код. Ссылка хранится в SQLite в зашифрованном виде и не выводится
+в логи.
+
+Реальные операции закрыты fail-closed флагом
+`ENABLE_LIVE_OPERATIONS=false`. Для live-режима обязательны:
+
+- `TELEGRAM_BOT_TOKEN` и `TELEGRAM_WEBHOOK_SECRET`;
+- `MARZBAN_BASE_URL`, `MARZBAN_USERNAME`, `MARZBAN_PASSWORD`;
+- `MARZBAN_VLESS_INBOUND_TAG`;
+- `SUBSCRIPTION_URL_ENCRYPTION_KEY` — 32 случайных байта в base64url;
+- `INTERNAL_JOB_SECRET` — отдельный случайный секрет worker endpoint.
+
+Telegram webhook принимает updates на `POST /api/telegram/webhook`.
+Периодическая обработка provisioning, Stars reconciliation и синхронизация
+Marzban выполняются Compose-сервисом `worker` через защищённый внутренний
+endpoint `/api/internal/jobs/reconcile`.
+
+Включать live-режим можно только после закрытия gates из
+`docs/operations/production-readiness.md`, включая `/terms`, `/paysupport`,
+контролируемый Stars/refund smoke и обязательное ревью платежей и Marzban.
 
 ## Проверка
 
