@@ -493,7 +493,10 @@ export async function listOrdersForAdmin(database: Database) {
     .select({
       chargeId: payments.telegramPaymentChargeId,
       createdAt: orders.createdAt,
+      currency: orders.currency,
       id: orders.id,
+      nextAttemptAt: orderProvisioning.nextAttemptAt,
+      paymentId: payments.id,
       paymentStatus: payments.status,
       planName: orders.planNameSnapshot,
       provisioningAttempts: orders.provisioningAttempts,
@@ -506,6 +509,7 @@ export async function listOrdersForAdmin(database: Database) {
     .from(orders)
     .innerJoin(users, eq(users.id, orders.userId))
     .leftJoin(payments, eq(payments.orderId, orders.id))
+    .leftJoin(orderProvisioning, eq(orderProvisioning.orderId, orders.id))
     .orderBy(desc(orders.createdAt), desc(orders.id));
 }
 

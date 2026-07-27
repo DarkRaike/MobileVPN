@@ -243,18 +243,48 @@ export async function requestFullRefund(
       );
     }
 
-    const refundId = randomUUID();
-    await transaction.insert(refunds).values({
+    const existingRefundRecords = await transaction
+      .select({ id: refunds.id, status: refunds.status })
+      .from(refunds)
+      .where(eq(refunds.paymentId, paymentId))
+      .orderBy(desc(refunds.requestedAt))
+      .limit(1);
+    const existingRefund = existingRefundRecords[0];
+
+    if (
+      existingRefund &&
+      ["refund_requested", "refund_pending", "refunded"].includes(
+        existingRefund.status,
+      )
+    ) {
+      return null;
+    }
+
+    const refundId = existingRefund?.id ?? randomUUID();
+    const refundValues = {
       amountStars: payment.amountStars,
-      createdAt: now,
       currency: "XTR",
-      id: refundId,
+      failedAt: null,
       paymentId,
+      providerEvidenceSafe: null,
       reasonCode,
       requestedAt: now,
-      status: "refund_pending",
+      status: "refund_pending" as const,
       updatedAt: now,
-    });
+    };
+
+    if (existingRefund) {
+      await transaction
+        .update(refunds)
+        .set(refundValues)
+        .where(eq(refunds.id, refundId));
+    } else {
+      await transaction.insert(refunds).values({
+        ...refundValues,
+        createdAt: now,
+        id: refundId,
+      });
+    }
 
     return {
       amountStars: payment.amountStars,

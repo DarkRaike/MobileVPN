@@ -5,6 +5,7 @@
   import AppIcon from "$lib/components/AppIcon.svelte";
   import AuditLog from "$lib/features/admin/AuditLog.svelte";
   import FaqManager from "$lib/features/admin/FaqManager.svelte";
+  import OrderManager from "$lib/features/admin/OrderManager.svelte";
   import PlanManager from "$lib/features/admin/PlanManager.svelte";
   import PromoManager from "$lib/features/admin/PromoManager.svelte";
   import TicketManager from "$lib/features/admin/TicketManager.svelte";
@@ -12,6 +13,7 @@
     AdminActionFeedback,
     AdminAuditRecord,
     AdminFaq,
+    AdminOrder,
     AdminPlan,
     AdminPromoCode,
     AdminTicket,
@@ -19,7 +21,8 @@
 
   import type { PageProps } from "./$types";
 
-  type AdminSection = "audit" | "catalog" | "faq" | "promos" | "tickets";
+  type AdminSection =
+    "audit" | "catalog" | "faq" | "orders" | "promos" | "tickets";
 
   let { data, form }: PageProps = $props();
   let activeSection = $state<AdminSection>("catalog");
@@ -38,6 +41,7 @@
     label: string;
   }> = [
     { id: "catalog", label: "Тарифы" },
+    { id: "orders", label: "Заказы" },
     { id: "promos", label: "Промокоды" },
     { id: "faq", label: "FAQ" },
     { id: "tickets", label: "Обращения" },
@@ -107,6 +111,8 @@
     <div class="admin-content">
       {#if activeSection === "catalog"}
         <PlanManager plans={data.catalog.plans as AdminPlan[]} />
+      {:else if activeSection === "orders"}
+        <OrderManager orders={data.orders as AdminOrder[]} />
       {:else if activeSection === "promos"}
         <PromoManager
           plans={data.catalog.plans as AdminPlan[]}

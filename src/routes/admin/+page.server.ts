@@ -18,6 +18,8 @@ import {
   updatePlan,
   updatePromoCode,
 } from "$lib/server/modules/catalog/catalog";
+import { listOrdersForAdmin } from "$lib/server/modules/orders/orders";
+import { requeueProvisioningOrder } from "$lib/server/modules/subscriptions/provisioning";
 import {
   listAuditLog,
   listSupportTickets,
@@ -59,6 +61,7 @@ type AdminActionName =
   | "promo.deactivate"
   | "promo.delete"
   | "promo.update"
+  | "order.provisioning_retry"
   | "support.status_update";
 
 interface AdminActionEvent {
@@ -156,16 +159,18 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const admin = requireAdminUser(locals.user, config.telegramAdminUserId);
   const { database } = await getDatabase();
   const ticketStatus = parseTicketFilter(url.searchParams.get("ticketStatus"));
-  const [catalog, tickets, auditLog] = await Promise.all([
+  const [catalog, tickets, auditLog, orders] = await Promise.all([
     listCatalogForAdmin(database),
     listSupportTickets(database, ticketStatus),
     listAuditLog(database),
+    listOrdersForAdmin(database),
   ]);
 
   return {
     admin,
     auditLog,
     catalog,
+    orders,
     ticketStatus: ticketStatus ?? "all",
     tickets,
   };
@@ -229,6 +234,29 @@ export const actions = {
         action,
         entityId: promoCode.id,
         message: "Промокод создан.",
+        ok: true as const,
+      };
+    } catch (error) {
+      return adminActionError(action, error);
+    }
+  },
+  retryProvisioning: async (event) => {
+    const action = "order.provisioning_retry" as const;
+
+    try {
+      const context = await prepareAdminAction(event);
+      const id = parseEntityId(context.formData);
+      await requeueProvisioningOrder(
+        context.database,
+        id,
+        new Date(),
+        context.adminUserId,
+      );
+
+      return {
+        action,
+        entityId: id,
+        message: "Заказ поставлен в очередь на безопасный повтор.",
         ok: true as const,
       };
     } catch (error) {

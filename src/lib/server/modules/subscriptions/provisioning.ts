@@ -16,6 +16,7 @@ import {
 import { ApplicationError } from "../../application-error";
 import type { Database } from "../../db/client";
 import {
+  adminAuditLog,
   orderProvisioning,
   orders,
   payments,
@@ -24,6 +25,7 @@ import {
 import { calculateSubscriptionExpiry } from "../../domain/subscriptions";
 import type { Marzban, MarzbanUser } from "../../integrations/marzban/marzban";
 import { encryptSubscriptionUrl } from "../../security/subscription-url";
+import { createAuditRecord } from "../admin/audit";
 
 const LOCK_TIMEOUT_MILLISECONDS = 5 * 60 * 1_000;
 const RETRY_DELAYS_SECONDS = [60, 300, 900, 3_600, 21_600] as const;
@@ -444,6 +446,7 @@ export async function requeueProvisioningOrder(
   database: Database,
   orderId: string,
   now = new Date(),
+  adminUserId?: string,
 ): Promise<void> {
   await database.transaction(async (transaction) => {
     const records = await transaction
@@ -490,6 +493,26 @@ export async function requeueProvisioningOrder(
         updatedAt: now,
       })
       .where(eq(orderProvisioning.orderId, orderId));
+
+    if (adminUserId) {
+      await transaction.insert(adminAuditLog).values(
+        createAuditRecord({
+          action: "order.provisioning_retry",
+          adminUserId,
+          after: {
+            orderStatus: "paid",
+            provisioningState: "pending",
+          },
+          before: {
+            orderStatus: order.orderStatus,
+            provisioningState: order.provisioningState,
+          },
+          entityId: orderId,
+          entityType: "order",
+          now,
+        }),
+      );
+    }
   });
 }
 

@@ -20,6 +20,7 @@ import {
 } from "../../src/lib/server/db/client";
 import { migrateDatabase } from "../../src/lib/server/db/migrate";
 import {
+  adminAuditLog,
   orderProvisioning,
   orders,
   payments,
@@ -83,6 +84,7 @@ describe("subscription provisioning", () => {
   });
 
   beforeEach(async () => {
+    await context.database.delete(adminAuditLog);
     await context.database.delete(orderProvisioning);
     await context.database.delete(subscriptions);
     await context.database.delete(payments);
@@ -222,7 +224,8 @@ describe("subscription provisioning", () => {
       }),
     );
 
-    await requeueProvisioningOrder(context.database, orderId, NOW);
+    await requeueProvisioningOrder(context.database, orderId, NOW, userId);
+    const auditRecords = await context.database.select().from(adminAuditLog);
     const retried = await provisionOrder(
       context.database,
       marzban,
@@ -233,5 +236,13 @@ describe("subscription provisioning", () => {
 
     expect(retried.status).toBe("applied");
     expect(marzban.createUser).toHaveBeenCalledTimes(1);
+    expect(auditRecords).toEqual([
+      expect.objectContaining({
+        action: "order.provisioning_retry",
+        adminUserId: userId,
+        entityId: orderId,
+        entityType: "order",
+      }),
+    ]);
   });
 });

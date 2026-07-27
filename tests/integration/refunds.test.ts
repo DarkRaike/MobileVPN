@@ -215,5 +215,20 @@ describe("Telegram Stars refunds", () => {
 
     expect(storedPayment?.status).toBe("succeeded");
     expect(storedRefund?.status).toBe("refund_failed");
+
+    const retry = await requestFullRefund(
+      context.database,
+      adapter,
+      paymentId,
+      "customer_request",
+      new Date(REFUND_NOW.getTime() + 60_000),
+    );
+    const retriedRefunds = await context.database.select().from(refunds);
+
+    expect(retry).toEqual({ duplicate: false });
+    expect(adapter.refundPayment).toHaveBeenCalledTimes(2);
+    expect(retriedRefunds).toHaveLength(1);
+    expect(retriedRefunds[0]?.id).toBe(storedRefund?.id);
+    expect(retriedRefunds[0]?.status).toBe("refunded");
   });
 });

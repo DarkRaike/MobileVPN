@@ -54,6 +54,32 @@ export interface AdminTicket {
   username: string | null;
 }
 
+export interface AdminOrder {
+  chargeId: string | null;
+  createdAt: Date;
+  currency: string;
+  id: string;
+  nextAttemptAt: Date | null;
+  paymentId: string | null;
+  paymentStatus:
+    "cancelled" | "failed" | "pending" | "refunded" | "succeeded" | null;
+  planName: string;
+  provisioningAttempts: number;
+  provisioningErrorCode: string | null;
+  provisioningStatus:
+    "failed" | "not_started" | "pending" | "processing" | "succeeded";
+  status:
+    | "active"
+    | "cancelled"
+    | "paid"
+    | "pending_payment"
+    | "provisioning"
+    | "provisioning_failed"
+    | "refunded";
+  telegramUserId: string;
+  totalStars: number;
+}
+
 export interface AdminAuditRecord {
   action: string;
   adminUserId: string;
