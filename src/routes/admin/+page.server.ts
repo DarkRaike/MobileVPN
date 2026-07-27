@@ -1,0 +1,420 @@
+import { fail } from "@sveltejs/kit";
+
+import { ApplicationError } from "$lib/server/application-error";
+import { requireAdminUser } from "$lib/server/auth/admin";
+import { getRuntimeConfig } from "$lib/server/config/runtime";
+import { getDatabase } from "$lib/server/db/runtime";
+import {
+  createFaq,
+  createPlan,
+  createPromoCode,
+  deactivatePlan,
+  deactivatePromoCode,
+  deleteFaq,
+  deletePlan,
+  deletePromoCode,
+  listCatalogForAdmin,
+  updateFaq,
+  updatePlan,
+  updatePromoCode,
+} from "$lib/server/modules/catalog/catalog";
+import {
+  listAuditLog,
+  listSupportTickets,
+  updateSupportTicketStatus,
+  type SupportTicketStatus,
+} from "$lib/server/modules/support/support";
+import { consumeRateLimit } from "$lib/server/security/rate-limit";
+import {
+  assertFormPayloadSize,
+  assertRequestSize,
+  isValidationError,
+  parseEntityId,
+  parseFaqInput,
+  parsePlanInput,
+  parsePromoCodeInput,
+  parseSupportStatus,
+} from "$lib/server/validation/forms";
+
+import type { Actions, PageServerLoad } from "./$types";
+
+const ADMIN_FORM_MAXIMUM_BYTES = 64 * 1024;
+const ADMIN_RATE_LIMIT = 60;
+const ADMIN_RATE_LIMIT_WINDOW_SECONDS = 60;
+const supportStatuses = new Set<SupportTicketStatus>([
+  "new",
+  "in_progress",
+  "resolved",
+]);
+
+type AdminActionName =
+  | "faq.create"
+  | "faq.delete"
+  | "faq.update"
+  | "plan.create"
+  | "plan.deactivate"
+  | "plan.delete"
+  | "plan.update"
+  | "promo.create"
+  | "promo.deactivate"
+  | "promo.delete"
+  | "promo.update"
+  | "support.status_update";
+
+interface AdminActionEvent {
+  getClientAddress(): string;
+  locals: App.Locals;
+  request: Request;
+}
+
+async function prepareAdminAction(event: AdminActionEvent): Promise<{
+  adminUserId: string;
+  database: Awaited<ReturnType<typeof getDatabase>>["database"];
+  formData: FormData;
+}> {
+  const config = getRuntimeConfig();
+  const admin = requireAdminUser(event.locals.user, config.telegramAdminUserId);
+  const rateLimit = consumeRateLimit(
+    `admin:${admin.id}:${event.getClientAddress()}`,
+    ADMIN_RATE_LIMIT,
+    ADMIN_RATE_LIMIT_WINDOW_SECONDS,
+  );
+
+  if (!rateLimit.allowed) {
+    throw new ApplicationError(
+      "ADMIN_RATE_LIMITED",
+      "Слишком много действий. Повторите позже.",
+    );
+  }
+
+  assertRequestSize(event.request, ADMIN_FORM_MAXIMUM_BYTES);
+  const formData = await event.request.formData();
+  assertFormPayloadSize(formData, ADMIN_FORM_MAXIMUM_BYTES);
+  const { database } = await getDatabase();
+
+  return {
+    adminUserId: admin.id,
+    database,
+    formData,
+  };
+}
+
+function adminActionError(action: AdminActionName, error: unknown) {
+  if (error instanceof ApplicationError) {
+    const status =
+      error.code === "REQUEST_TOO_LARGE"
+        ? 413
+        : error.code === "ADMIN_RATE_LIMITED"
+          ? 429
+          : 400;
+
+    return fail(status, {
+      action,
+      code: error.code,
+      message: error.message,
+      ok: false as const,
+    });
+  }
+
+  if (isValidationError(error)) {
+    return fail(400, {
+      action,
+      code: "FORM_INVALID",
+      message: "Проверьте заполнение формы.",
+      ok: false as const,
+    });
+  }
+
+  console.error(
+    JSON.stringify({
+      action,
+      errorCode: "ADMIN_MUTATION_FAILED",
+      errorType: error instanceof Error ? error.name : "UnknownError",
+      level: "error",
+      timestamp: new Date().toISOString(),
+    }),
+  );
+
+  return fail(500, {
+    action,
+    code: "ADMIN_MUTATION_FAILED",
+    message: "Не удалось сохранить изменения.",
+    ok: false as const,
+  });
+}
+
+function parseTicketFilter(
+  value: string | null,
+): SupportTicketStatus | undefined {
+  return value && supportStatuses.has(value as SupportTicketStatus)
+    ? (value as SupportTicketStatus)
+    : undefined;
+}
+
+export const load: PageServerLoad = async ({ locals, url }) => {
+  const config = getRuntimeConfig();
+  const admin = requireAdminUser(locals.user, config.telegramAdminUserId);
+  const { database } = await getDatabase();
+  const ticketStatus = parseTicketFilter(url.searchParams.get("ticketStatus"));
+  const [catalog, tickets, auditLog] = await Promise.all([
+    listCatalogForAdmin(database),
+    listSupportTickets(database, ticketStatus),
+    listAuditLog(database),
+  ]);
+
+  return {
+    admin,
+    auditLog,
+    catalog,
+    ticketStatus: ticketStatus ?? "all",
+    tickets,
+  };
+};
+
+export const actions = {
+  createFaq: async (event) => {
+    const action = "faq.create" as const;
+
+    try {
+      const context = await prepareAdminAction(event);
+      const faq = await createFaq(
+        context.database,
+        context.adminUserId,
+        parseFaqInput(context.formData),
+      );
+
+      return {
+        action,
+        entityId: faq.id,
+        message: "FAQ создан.",
+        ok: true as const,
+      };
+    } catch (error) {
+      return adminActionError(action, error);
+    }
+  },
+  createPlan: async (event) => {
+    const action = "plan.create" as const;
+
+    try {
+      const context = await prepareAdminAction(event);
+      const plan = await createPlan(
+        context.database,
+        context.adminUserId,
+        parsePlanInput(context.formData),
+      );
+
+      return {
+        action,
+        entityId: plan.id,
+        message: "Тариф создан.",
+        ok: true as const,
+      };
+    } catch (error) {
+      return adminActionError(action, error);
+    }
+  },
+  createPromo: async (event) => {
+    const action = "promo.create" as const;
+
+    try {
+      const context = await prepareAdminAction(event);
+      const promoCode = await createPromoCode(
+        context.database,
+        context.adminUserId,
+        parsePromoCodeInput(context.formData),
+      );
+
+      return {
+        action,
+        entityId: promoCode.id,
+        message: "Промокод создан.",
+        ok: true as const,
+      };
+    } catch (error) {
+      return adminActionError(action, error);
+    }
+  },
+  deactivatePlan: async (event) => {
+    const action = "plan.deactivate" as const;
+
+    try {
+      const context = await prepareAdminAction(event);
+      const id = parseEntityId(context.formData);
+      await deactivatePlan(context.database, context.adminUserId, id);
+
+      return {
+        action,
+        entityId: id,
+        message: "Тариф деактивирован.",
+        ok: true as const,
+      };
+    } catch (error) {
+      return adminActionError(action, error);
+    }
+  },
+  deactivatePromo: async (event) => {
+    const action = "promo.deactivate" as const;
+
+    try {
+      const context = await prepareAdminAction(event);
+      const id = parseEntityId(context.formData);
+      await deactivatePromoCode(context.database, context.adminUserId, id);
+
+      return {
+        action,
+        entityId: id,
+        message: "Промокод деактивирован.",
+        ok: true as const,
+      };
+    } catch (error) {
+      return adminActionError(action, error);
+    }
+  },
+  deleteFaq: async (event) => {
+    const action = "faq.delete" as const;
+
+    try {
+      const context = await prepareAdminAction(event);
+      const id = parseEntityId(context.formData);
+      await deleteFaq(context.database, context.adminUserId, id);
+
+      return {
+        action,
+        entityId: id,
+        message: "FAQ удалён.",
+        ok: true as const,
+      };
+    } catch (error) {
+      return adminActionError(action, error);
+    }
+  },
+  deletePlan: async (event) => {
+    const action = "plan.delete" as const;
+
+    try {
+      const context = await prepareAdminAction(event);
+      const id = parseEntityId(context.formData);
+      await deletePlan(context.database, context.adminUserId, id);
+
+      return {
+        action,
+        entityId: id,
+        message: "Тариф удалён.",
+        ok: true as const,
+      };
+    } catch (error) {
+      return adminActionError(action, error);
+    }
+  },
+  deletePromo: async (event) => {
+    const action = "promo.delete" as const;
+
+    try {
+      const context = await prepareAdminAction(event);
+      const id = parseEntityId(context.formData);
+      await deletePromoCode(context.database, context.adminUserId, id);
+
+      return {
+        action,
+        entityId: id,
+        message: "Промокод удалён.",
+        ok: true as const,
+      };
+    } catch (error) {
+      return adminActionError(action, error);
+    }
+  },
+  updateFaq: async (event) => {
+    const action = "faq.update" as const;
+
+    try {
+      const context = await prepareAdminAction(event);
+      const id = parseEntityId(context.formData);
+      await updateFaq(
+        context.database,
+        context.adminUserId,
+        id,
+        parseFaqInput(context.formData),
+      );
+
+      return {
+        action,
+        entityId: id,
+        message: "FAQ обновлён.",
+        ok: true as const,
+      };
+    } catch (error) {
+      return adminActionError(action, error);
+    }
+  },
+  updatePlan: async (event) => {
+    const action = "plan.update" as const;
+
+    try {
+      const context = await prepareAdminAction(event);
+      const id = parseEntityId(context.formData);
+      await updatePlan(
+        context.database,
+        context.adminUserId,
+        id,
+        parsePlanInput(context.formData),
+      );
+
+      return {
+        action,
+        entityId: id,
+        message: "Тариф обновлён.",
+        ok: true as const,
+      };
+    } catch (error) {
+      return adminActionError(action, error);
+    }
+  },
+  updatePromo: async (event) => {
+    const action = "promo.update" as const;
+
+    try {
+      const context = await prepareAdminAction(event);
+      const id = parseEntityId(context.formData);
+      await updatePromoCode(
+        context.database,
+        context.adminUserId,
+        id,
+        parsePromoCodeInput(context.formData),
+      );
+
+      return {
+        action,
+        entityId: id,
+        message: "Промокод обновлён.",
+        ok: true as const,
+      };
+    } catch (error) {
+      return adminActionError(action, error);
+    }
+  },
+  updateTicketStatus: async (event) => {
+    const action = "support.status_update" as const;
+
+    try {
+      const context = await prepareAdminAction(event);
+      const input = parseSupportStatus(context.formData);
+      await updateSupportTicketStatus(
+        context.database,
+        context.adminUserId,
+        input.id,
+        input.status,
+      );
+
+      return {
+        action,
+        entityId: input.id,
+        message: "Статус обращения обновлён.",
+        ok: true as const,
+      };
+    } catch (error) {
+      return adminActionError(action, error);
+    }
+  },
+} satisfies Actions;
