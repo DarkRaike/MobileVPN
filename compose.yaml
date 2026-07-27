@@ -1,0 +1,102 @@
+services:
+  app:
+    build:
+      context: .
+      target: development
+    init: true
+    environment:
+      DATABASE_URL: /data/astra-vpn.sqlite
+      BACKUP_STATUS_FILE: /data/backup-status.json
+      ENABLE_DEV_MOCK_AUTH: ${ENABLE_DEV_MOCK_AUTH:-false}
+      ENABLE_LIVE_OPERATIONS: ${ENABLE_LIVE_OPERATIONS:-false}
+      INTERNAL_JOB_SECRET: ${INTERNAL_JOB_SECRET:-}
+      MARZBAN_BASE_URL: ${MARZBAN_BASE_URL:-}
+      MARZBAN_PASSWORD: ${MARZBAN_PASSWORD:-}
+      MARZBAN_USERNAME: ${MARZBAN_USERNAME:-}
+      MARZBAN_VLESS_INBOUND_TAG: ${MARZBAN_VLESS_INBOUND_TAG:-VLESS_TCP_REALITY_V1}
+      MONITORING_SECRET: ${MONITORING_SECRET:-}
+      NODE_ENV: development
+      ORIGIN: http://localhost:5173
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
+      SUBSCRIPTION_URL_ENCRYPTION_KEY: ${SUBSCRIPTION_URL_ENCRYPTION_KEY:-}
+      TELEGRAM_ADMIN_USER_ID: ${TELEGRAM_ADMIN_USER_ID:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: ${TELEGRAM_INIT_DATA_MAX_AGE_SECONDS:-300}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      DEV_MOCK_FIRST_NAME: ${DEV_MOCK_FIRST_NAME:-Developer}
+      DEV_MOCK_LAST_NAME: ${DEV_MOCK_LAST_NAME:-}
+      DEV_MOCK_TELEGRAM_USER_ID: ${DEV_MOCK_TELEGRAM_USER_ID:-900000001}
+      DEV_MOCK_USERNAME: ${DEV_MOCK_USERNAME:-}
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - app-node-modules:/app/node_modules
+      - app-data:/data
+    command:
+      - sh
+      - -c
+      - npm run db:migrate && npm run dev -- --host 0.0.0.0
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:5173/readyz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      target: development
+    init: true
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      ENABLE_LIVE_OPERATIONS: ${ENABLE_LIVE_OPERATIONS:-false}
+      INTERNAL_JOB_SECRET: ${INTERNAL_JOB_SECRET:-}
+      INTERNAL_JOB_URL: http://app:5173/api/internal/jobs/reconcile
+      RECONCILIATION_INTERVAL_MILLISECONDS: ${RECONCILIATION_INTERVAL_MILLISECONDS:-30000}
+    volumes:
+      - .:/app
+      - app-node-modules:/app/node_modules
+    command:
+      - npm
+      - run
+      - jobs:run
+    restart: unless-stopped
+
+  monitoring:
+    build:
+      context: .
+      target: development
+    init: true
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      ALERT_REPEAT_MILLISECONDS: ${ALERT_REPEAT_MILLISECONDS:-1800000}
+      ALERT_TELEGRAM_CHAT_ID: ${ALERT_TELEGRAM_CHAT_ID:-}
+      MONITORING_API_URL: http://app:5173/api/internal/monitoring
+      MONITORING_INTERVAL_MILLISECONDS: ${MONITORING_INTERVAL_MILLISECONDS:-60000}
+      MONITORING_SECRET: ${MONITORING_SECRET:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    volumes:
+      - .:/app
+      - app-node-modules:/app/node_modules
+    command:
+      - npm
+      - run
+      - monitoring:run
+    restart: unless-stopped
+
+volumes:
+  app-data:
+  app-node-modules:

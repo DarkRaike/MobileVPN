@@ -1,5 +1,5 @@
 {
-  "name": "astra-vpn-contracts",
+  "name": "astra-vpn-mini-app",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,20 +7,61 @@
     "node": ">=24.11.0 <25"
   },
   "scripts": {
+    "dev": "vite dev",
+    "preview": "vite preview",
+    "prepare": "svelte-kit sync",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "test": "node --test",
-    "build": "node scripts/build-contract-bundle.mjs",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build"
+    "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "test": "npm run test:contracts && npm run test:unit && npm run test:ops",
+    "test:contracts": "node --test tests/contracts/*.test.mjs",
+    "test:unit": "vitest run",
+    "test:ops": "node scripts/run-python-tests.mjs",
+    "test:e2e": "playwright test",
+    "e2e:prepare": "tsx scripts/e2e-setup.ts",
+    "e2e:serve": "npm run e2e:prepare && vite dev --host 127.0.0.1 --port 4173",
+    "build": "vite build",
+    "build:contracts": "node scripts/build-contract-bundle.mjs",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:seed": "tsx scripts/seed.ts",
+    "db:check": "tsx scripts/check-migrations.ts",
+    "jobs:run": "node scripts/reconciliation-worker.mjs",
+    "monitoring:run": "node scripts/monitoring-worker.mjs",
+    "backup:run": "python3 scripts/backup.py",
+    "restore:drill": "python3 scripts/restore_drill.py",
+    "security:audit": "npm audit --audit-level=high",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run db:check && npm run build && npm run build:contracts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.62.0",
+    "@sveltejs/adapter-node": "5.5.7",
+    "@sveltejs/kit": "2.70.1",
+    "@tailwindcss/vite": "4.3.3",
     "@types/node": "24.13.3",
+    "dotenv": "17.4.2",
+    "drizzle-kit": "0.31.10",
     "eslint": "10.8.0",
+    "eslint-plugin-svelte": "3.22.0",
     "globals": "17.8.0",
     "prettier": "3.9.6",
-    "typescript": "7.0.2"
+    "prettier-plugin-svelte": "4.1.1",
+    "prettier-plugin-tailwindcss": "0.8.1",
+    "svelte": "5.56.8",
+    "svelte-check": "4.7.3",
+    "tailwindcss": "4.3.3",
+    "tsx": "4.23.1",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.65.0",
+    "vite": "8.1.5",
+    "vitest": "4.1.10"
+  },
+  "dependencies": {
+    "@libsql/client": "0.17.4",
+    "drizzle-orm": "0.45.2",
+    "qrcode-generator": "2.0.4",
+    "zod": "4.4.3"
   }
 }

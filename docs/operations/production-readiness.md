@@ -27,3 +27,16 @@
 - реальный VPN-доступ не выдаётся;
 - `productionReady` остаётся `false`;
 - CI остаётся единственной автоматизацией GitHub Actions, без CD.
+
+Stage 4 implementation artifacts:
+
+- security review: `docs/operations/security-review.md`;
+- backup/restore: `docs/operations/backup-restore.md`;
+- monitoring: `docs/operations/monitoring.md`;
+- Telegram smoke template: `docs/operations/telegram-client-smoke.md`;
+- release/rollback: `docs/operations/release-checklist.md`;
+- локальный automation drill:
+  `docs/evidence/local-backup-restore-drill-2026-07-28.json`.
+
+Локальный drill и автоматические E2E не меняют статусы external gates. Значения
+в таблице обновляются только после реальной production-проверки и review.

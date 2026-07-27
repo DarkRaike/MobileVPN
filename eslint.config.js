@@ -1,18 +1,43 @@
 import eslint from "@eslint/js";
 import globals from "globals";
+import svelte from "eslint-plugin-svelte";
+import tseslint from "typescript-eslint";
 
 export default [
   {
     ignores: [
+      ".svelte-kit/**",
       "artifacts/**",
+      "build/**",
       "contracts/marzban/openapi.v0.8.4.json",
+      "drizzle/**",
       "node_modules/**",
+      "playwright-report/**",
+      "test-results/**",
       "vpn-mini-app.html",
     ],
   },
   eslint.configs.recommended,
+  ...tseslint.configs.recommended,
+  ...svelte.configs.recommended,
   {
-    files: ["**/*.js", "**/*.mjs"],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
+    },
+  },
+  {
+    files: ["**/*.svelte"],
+    languageOptions: {
+      parserOptions: {
+        parser: tseslint.parser,
+      },
+    },
+  },
+  {
+    files: ["**/*.js", "**/*.mjs", "**/*.ts"],
     languageOptions: {
       ecmaVersion: 2024,
       globals: globals.node,

@@ -1,5 +1,6 @@
 {
   "endOfLine": "lf",
+  "plugins": ["prettier-plugin-svelte", "prettier-plugin-tailwindcss"],
   "proseWrap": "preserve",
   "trailingComma": "all"
 }
