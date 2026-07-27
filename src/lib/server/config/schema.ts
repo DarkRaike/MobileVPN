@@ -51,6 +51,13 @@ const environmentSchema = z
     ),
     ENABLE_DEV_MOCK_AUTH: booleanFromEnvironment.default(false),
     ENABLE_LIVE_OPERATIONS: booleanFromEnvironment.default(false),
+    INTERNAL_JOB_SECRET: z.preprocess(
+      emptyStringToUndefined,
+      z
+        .string()
+        .regex(/^[A-Za-z0-9_-]{32,256}$/)
+        .optional(),
+    ),
     MARZBAN_BASE_URL: z.preprocess(
       emptyStringToUndefined,
       z.string().url().optional(),
@@ -160,6 +167,7 @@ const environmentSchema = z
         ["MARZBAN_BASE_URL", environment.MARZBAN_BASE_URL],
         ["MARZBAN_PASSWORD", environment.MARZBAN_PASSWORD],
         ["MARZBAN_USERNAME", environment.MARZBAN_USERNAME],
+        ["INTERNAL_JOB_SECRET", environment.INTERNAL_JOB_SECRET],
         [
           "SUBSCRIPTION_URL_ENCRYPTION_KEY",
           environment.SUBSCRIPTION_URL_ENCRYPTION_KEY,
@@ -190,6 +198,7 @@ export interface RuntimeConfig {
     username?: string;
   };
   isProduction: boolean;
+  internalJobSecret?: string;
   liveOperationsEnabled: boolean;
   marzban?: {
     baseUrl: string;
@@ -253,6 +262,7 @@ export function parseRuntimeConfig(
       username: value.DEV_MOCK_USERNAME,
     },
     isProduction: value.NODE_ENV === "production",
+    internalJobSecret: value.INTERNAL_JOB_SECRET,
     liveOperationsEnabled: value.ENABLE_LIVE_OPERATIONS,
     marzban,
     nodeEnvironment: value.NODE_ENV,

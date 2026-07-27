@@ -91,6 +91,7 @@ describe("parseRuntimeConfig", () => {
     ).toThrowError(
       expect.objectContaining({
         fields: [
+          "INTERNAL_JOB_SECRET",
           "MARZBAN_BASE_URL",
           "MARZBAN_PASSWORD",
           "MARZBAN_USERNAME",

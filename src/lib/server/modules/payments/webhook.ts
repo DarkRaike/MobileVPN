@@ -9,6 +9,7 @@ import {
   confirmSuccessfulPayment,
   validatePreCheckout,
 } from "../orders/orders";
+import { confirmRefundedPayment } from "./refunds";
 
 const telegramUserSchema = z.object({
   id: z.number().int().safe(),
@@ -25,6 +26,7 @@ const updateSchema = z
       .object({
         date: z.number().int().nonnegative(),
         from: telegramUserSchema,
+        refunded_payment: paymentDetailsSchema.optional(),
         successful_payment: paymentDetailsSchema.optional(),
       })
       .optional(),
@@ -40,7 +42,11 @@ const updateSchema = z
     update_id: z.number().int().safe().nonnegative(),
   })
   .superRefine((update, context) => {
-    if (!update.pre_checkout_query && !update.message?.successful_payment) {
+    if (
+      !update.pre_checkout_query &&
+      !update.message?.successful_payment &&
+      !update.message?.refunded_payment
+    ) {
       context.addIssue({
         code: "custom",
         message: "Unsupported Telegram update",
@@ -114,7 +120,7 @@ export async function processTelegramPaymentUpdate(
   now = new Date(),
 ): Promise<{
   duplicate: boolean;
-  kind: "pre_checkout" | "successful_payment";
+  kind: "pre_checkout" | "refunded_payment" | "successful_payment";
 }> {
   const eventId = String(update.update_id);
   const preCheckout = update.pre_checkout_query;
@@ -172,6 +178,25 @@ export async function processTelegramPaymentUpdate(
   }
 
   const message = update.message;
+  const refundedPayment = message?.refunded_payment;
+
+  if (message && refundedPayment) {
+    const result = await confirmRefundedPayment(database, {
+      amountStars: refundedPayment.total_amount,
+      chargeId: refundedPayment.telegram_payment_charge_id,
+      currency: refundedPayment.currency,
+      eventId,
+      invoicePayload: refundedPayment.invoice_payload,
+      refundedAt: new Date(message.date * 1_000),
+      telegramUserId: String(message.from.id),
+    });
+
+    return {
+      duplicate: result.duplicate,
+      kind: "refunded_payment",
+    };
+  }
+
   const successfulPayment = message?.successful_payment;
 
   if (!message || !successfulPayment) {

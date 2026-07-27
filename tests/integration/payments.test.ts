@@ -37,6 +37,7 @@ import {
   createOrderInvoice,
   validatePreCheckout,
 } from "../../src/lib/server/modules/orders/orders";
+import { reconcileTelegramStars } from "../../src/lib/server/modules/payments/reconciliation";
 
 const NOW = new Date("2026-07-27T12:00:00.000Z");
 
@@ -50,9 +51,10 @@ class PaymentAdapterStub implements TelegramStarsPayments {
     return Promise.resolve();
   }
 
-  getTransactions(): Promise<StarTransactionPage> {
-    return Promise.resolve({ nextOffset: null, transactions: [] });
-  }
+  readonly getTransactions = vi.fn(async (): Promise<StarTransactionPage> => ({
+    nextOffset: null,
+    transactions: [],
+  }));
 
   refundPayment(): Promise<void> {
     return Promise.resolve();
@@ -239,6 +241,54 @@ describe("Telegram Stars orders", () => {
       ),
     ).rejects.toThrowError(
       expect.objectContaining({ code: "PRE_CHECKOUT_REJECTED" }),
+    );
+  });
+
+  it("recovers a missed successful payment from Stars transactions", async () => {
+    const adapter = new PaymentAdapterStub();
+    await createOrderInvoice(
+      context.database,
+      adapter,
+      userId,
+      {
+        idempotencyKey: randomUUID(),
+        planId,
+      },
+      NOW,
+    );
+    const storedPayment = (await context.database.select().from(payments))[0];
+
+    if (!storedPayment) {
+      throw new Error("Expected a pending payment");
+    }
+
+    adapter.getTransactions.mockResolvedValueOnce({
+      nextOffset: null,
+      transactions: [
+        {
+          amountStars: 249,
+          date: NOW,
+          id: "reconciled-charge-1",
+          invoicePayload: storedPayment.invoicePayload,
+          telegramUserId: "7000000012",
+        },
+      ],
+    });
+
+    const result = await reconcileTelegramStars(context.database, adapter, 1);
+    const reconciledPayment = (
+      await context.database
+        .select()
+        .from(payments)
+        .where(eq(payments.id, storedPayment.id))
+    )[0];
+
+    expect(result).toEqual({ confirmed: 1, inspected: 1 });
+    expect(reconciledPayment).toEqual(
+      expect.objectContaining({
+        status: "succeeded",
+        telegramPaymentChargeId: "reconciled-charge-1",
+      }),
     );
   });
 });

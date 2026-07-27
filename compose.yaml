@@ -7,12 +7,20 @@ services:
     environment:
       DATABASE_URL: /data/astra-vpn.sqlite
       ENABLE_DEV_MOCK_AUTH: ${ENABLE_DEV_MOCK_AUTH:-false}
+      ENABLE_LIVE_OPERATIONS: ${ENABLE_LIVE_OPERATIONS:-false}
+      INTERNAL_JOB_SECRET: ${INTERNAL_JOB_SECRET:-}
+      MARZBAN_BASE_URL: ${MARZBAN_BASE_URL:-}
+      MARZBAN_PASSWORD: ${MARZBAN_PASSWORD:-}
+      MARZBAN_USERNAME: ${MARZBAN_USERNAME:-}
+      MARZBAN_VLESS_INBOUND_TAG: ${MARZBAN_VLESS_INBOUND_TAG:-VLESS_TCP_REALITY_V1}
       NODE_ENV: development
       ORIGIN: http://localhost:5173
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
+      SUBSCRIPTION_URL_ENCRYPTION_KEY: ${SUBSCRIPTION_URL_ENCRYPTION_KEY:-}
       TELEGRAM_ADMIN_USER_ID: ${TELEGRAM_ADMIN_USER_ID:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: ${TELEGRAM_INIT_DATA_MAX_AGE_SECONDS:-300}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
       DEV_MOCK_FIRST_NAME: ${DEV_MOCK_FIRST_NAME:-Developer}
       DEV_MOCK_LAST_NAME: ${DEV_MOCK_LAST_NAME:-}
       DEV_MOCK_TELEGRAM_USER_ID: ${DEV_MOCK_TELEGRAM_USER_ID:-900000001}
@@ -39,6 +47,28 @@ services:
       timeout: 3s
       retries: 5
       start_period: 20s
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      target: development
+    init: true
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      ENABLE_LIVE_OPERATIONS: ${ENABLE_LIVE_OPERATIONS:-false}
+      INTERNAL_JOB_SECRET: ${INTERNAL_JOB_SECRET:-}
+      INTERNAL_JOB_URL: http://app:5173/api/internal/jobs/reconcile
+      RECONCILIATION_INTERVAL_MILLISECONDS: ${RECONCILIATION_INTERVAL_MILLISECONDS:-30000}
+    volumes:
+      - .:/app
+      - app-node-modules:/app/node_modules
+    command:
+      - npm
+      - run
+      - jobs:run
     restart: unless-stopped
 
 volumes:

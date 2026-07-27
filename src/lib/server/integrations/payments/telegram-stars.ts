@@ -1,8 +1,7 @@
-import { createHash, timingSafeEqual } from "node:crypto";
-
 import { z } from "zod";
 
 import { ApplicationError } from "../../application-error";
+import { constantTimeEquals } from "../../security/constant-time";
 
 const invoiceUrlSchema = z.string().url().max(2_048);
 const telegramBooleanSchema = z.literal(true);
@@ -110,14 +109,7 @@ export function verifyTelegramWebhookSecret(
   received: string | null,
   expected: string,
 ): boolean {
-  if (!received || !expected) {
-    return false;
-  }
-
-  const receivedDigest = createHash("sha256").update(received).digest();
-  const expectedDigest = createHash("sha256").update(expected).digest();
-
-  return timingSafeEqual(receivedDigest, expectedDigest);
+  return constantTimeEquals(received, expected);
 }
 
 function assertPositiveStars(value: number): void {

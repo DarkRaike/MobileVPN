@@ -23,6 +23,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/build ./build
 COPY --from=build /app/drizzle ./drizzle
+COPY --from=build /app/scripts/reconciliation-worker.mjs ./scripts/reconciliation-worker.mjs
 RUN mkdir -p /data && chown -R node:node /app /data
 USER node
 EXPOSE 3000
