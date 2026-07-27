@@ -25,6 +25,7 @@ describe("parseRuntimeConfig", () => {
         NODE_ENV: "production",
         ORIGIN: "https://app.example.com",
         SESSION_SECRET,
+        TELEGRAM_ADMIN_USER_ID: "123456789",
       }),
     ).toThrowError(
       expect.objectContaining({
@@ -39,6 +40,7 @@ describe("parseRuntimeConfig", () => {
         NODE_ENV: "production",
         ORIGIN: "http://app.example.com",
         SESSION_SECRET,
+        TELEGRAM_ADMIN_USER_ID: "123456789",
         TELEGRAM_BOT_TOKEN: "123456789:test_bot_token_value_123456789",
       }),
     ).toThrowError(
@@ -58,6 +60,22 @@ describe("parseRuntimeConfig", () => {
     ).toThrowError(
       expect.objectContaining({
         fields: ["TELEGRAM_BOT_TOKEN"],
+      }),
+    );
+  });
+
+  it("requires the Telegram administrator in production", () => {
+    expect(() =>
+      parseRuntimeConfig({
+        ENABLE_DEV_MOCK_AUTH: "false",
+        NODE_ENV: "production",
+        ORIGIN: "https://app.example.com",
+        SESSION_SECRET,
+        TELEGRAM_BOT_TOKEN: "123456789:test_bot_token_value_123456789",
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        fields: ["TELEGRAM_ADMIN_USER_ID"],
       }),
     );
   });

@@ -106,6 +106,17 @@ const environmentSchema = z
 
     if (
       environment.NODE_ENV === "production" &&
+      !environment.TELEGRAM_ADMIN_USER_ID
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Telegram administrator user ID is required in production",
+        path: ["TELEGRAM_ADMIN_USER_ID"],
+      });
+    }
+
+    if (
+      environment.NODE_ENV === "production" &&
       environment.ORIGIN &&
       new URL(environment.ORIGIN).protocol !== "https:"
     ) {
