@@ -9,7 +9,10 @@
     AppActionFeedback,
     CatalogPlan,
   } from "$lib/features/catalog/types";
-  import { getTelegramWebApp } from "$lib/telegram/web-app";
+  import {
+    getTelegramWebApp,
+    isTelegramVersionAtLeast,
+  } from "$lib/telegram/web-app";
 
   import AppIcon from "$lib/components/AppIcon.svelte";
   import UserAvatar from "$lib/components/UserAvatar.svelte";
@@ -69,6 +72,23 @@
         return;
       }
 
+      const webApp = getTelegramWebApp();
+      const openInvoice = webApp?.openInvoice?.bind(webApp);
+
+      if (!webApp || !openInvoice) {
+        cancel();
+        purchaseMessage =
+          "Откройте приложение внутри Telegram, чтобы оплатить счёт.";
+        return;
+      }
+
+      if (!isTelegramVersionAtLeast(webApp.version, "6.1")) {
+        cancel();
+        purchaseMessage =
+          "Обновите Telegram до актуальной версии, чтобы оплатить счёт.";
+        return;
+      }
+
       const attemptKey = purchaseAttemptKeys.get(planId) ?? crypto.randomUUID();
       purchaseAttemptKeys.set(planId, attemptKey);
       formData.set("idempotencyKey", attemptKey);
@@ -88,15 +108,7 @@
         }
 
         purchaseAttemptKeys.delete(planId);
-        const webApp = getTelegramWebApp();
-
-        if (!webApp?.openInvoice) {
-          purchaseMessage =
-            "Откройте приложение внутри Telegram, чтобы оплатить счёт.";
-          return;
-        }
-
-        webApp.openInvoice(result.data.invoiceUrl, (status) => {
+        openInvoice(result.data.invoiceUrl, (status) => {
           purchaseMessage =
             status === "paid"
               ? "Telegram принял оплату. Ожидаем серверное подтверждение."

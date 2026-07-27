@@ -57,6 +57,7 @@ function createTelegramInitData(
 async function installTelegramClient(
   page: Page,
   initData: string,
+  version = "9.6",
 ): Promise<void> {
   await page.route("https://telegram.org/js/telegram-web-app.js*", (route) =>
     route.fulfill({
@@ -65,51 +66,54 @@ async function installTelegramClient(
       status: 200,
     }),
   );
-  await page.addInitScript((signedInitData) => {
-    const themeCallbacks = new Set<() => void>();
-    const backCallbacks = new Set<() => void>();
-    const webApp = {
-      BackButton: {
-        hide() {},
-        offClick(callback: () => void) {
-          backCallbacks.delete(callback);
+  await page.addInitScript(
+    ({ signedInitData, telegramVersion }) => {
+      const themeCallbacks = new Set<() => void>();
+      const backCallbacks = new Set<() => void>();
+      const webApp = {
+        BackButton: {
+          hide() {},
+          offClick(callback: () => void) {
+            backCallbacks.delete(callback);
+          },
+          onClick(callback: () => void) {
+            backCallbacks.add(callback);
+          },
+          show() {},
         },
-        onClick(callback: () => void) {
-          backCallbacks.add(callback);
+        colorScheme: "dark" as const,
+        expand() {},
+        initData: signedInitData,
+        offEvent(_event: "themeChanged", callback: () => void) {
+          themeCallbacks.delete(callback);
         },
-        show() {},
-      },
-      colorScheme: "dark" as const,
-      expand() {},
-      initData: signedInitData,
-      offEvent(_event: "themeChanged", callback: () => void) {
-        themeCallbacks.delete(callback);
-      },
-      onEvent(_event: "themeChanged", callback: () => void) {
-        themeCallbacks.add(callback);
-      },
-      openInvoice(url: string, callback?: (status: "paid") => void) {
-        Object.assign(window, { __lastInvoiceUrl: url });
-        callback?.("paid");
-      },
-      ready() {},
-      setBackgroundColor() {},
-      setBottomBarColor() {},
-      setHeaderColor() {},
-      themeParams: {
-        accent_text_color: "#4d96ff",
-        bg_color: "#151616",
-        button_color: "#4d96ff",
-        button_text_color: "#ffffff",
-        hint_color: "#8b8d91",
-        secondary_bg_color: "#202121",
-        text_color: "#f5f7fa",
-      },
-      version: "9.6",
-    };
+        onEvent(_event: "themeChanged", callback: () => void) {
+          themeCallbacks.add(callback);
+        },
+        openInvoice(url: string, callback?: (status: "paid") => void) {
+          Object.assign(window, { __lastInvoiceUrl: url });
+          callback?.("paid");
+        },
+        ready() {},
+        setBackgroundColor() {},
+        setBottomBarColor() {},
+        setHeaderColor() {},
+        themeParams: {
+          accent_text_color: "#4d96ff",
+          bg_color: "#151616",
+          button_color: "#4d96ff",
+          button_text_color: "#ffffff",
+          hint_color: "#8b8d91",
+          secondary_bg_color: "#202121",
+          text_color: "#f5f7fa",
+        },
+        version: telegramVersion,
+      };
 
-    Object.assign(window, { Telegram: { WebApp: webApp } });
-  }, initData);
+      Object.assign(window, { Telegram: { WebApp: webApp } });
+    },
+    { signedInitData: initData, telegramVersion: version },
+  );
 }
 
 async function getProviderState(
@@ -283,6 +287,34 @@ test("rejects forged Telegram initData", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Повторить вход" }),
   ).toBeVisible();
+});
+
+test("rejects an outdated Telegram client before creating an invoice", async ({
+  page,
+  request,
+}) => {
+  await resetProvider(request);
+  await installTelegramClient(
+    page,
+    createTelegramInitData(910000003, "Legacy"),
+    "6.0",
+  );
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Выберите свой тариф" }),
+  ).toBeVisible();
+
+  await page.getByLabel("Подтверждаю условия покупки").check();
+  const starterPlan = page.locator("article.tariff").filter({
+    has: page.getByText("Старт", { exact: true }),
+  });
+  await starterPlan.getByRole("button", { name: "Купить" }).click();
+  await expect(
+    page.getByText(
+      "Обновите Telegram до актуальной версии, чтобы оплатить счёт.",
+    ),
+  ).toBeVisible();
+  expect((await getProviderState(request)).lastInvoice).toBeNull();
 });
 
 test("keeps a confirmed payment retryable when Marzban is unavailable", async ({
