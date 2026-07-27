@@ -7,9 +7,11 @@ import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
 
 import * as schema from "./schema";
 
+export type Database = LibSQLDatabase<typeof schema>;
+
 export interface DatabaseContext {
   client: Client;
-  database: LibSQLDatabase<typeof schema>;
+  database: Database;
   close(): void;
 }
 
