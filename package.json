@@ -48,6 +48,7 @@
     "vitest": "4.1.10"
   },
   "dependencies": {
+    "@libsql/client": "0.17.4",
     "drizzle-orm": "0.45.2",
     "zod": "4.4.3"
   }
