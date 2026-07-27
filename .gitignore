@@ -1,6 +1,9 @@
 node_modules/
 artifacts/
+build/
 coverage/
+data/
+.svelte-kit/
 
 .env
 .env.*

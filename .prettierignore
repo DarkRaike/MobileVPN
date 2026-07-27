@@ -3,4 +3,7 @@ tech.md
 vpn-mini-app.html
 contracts/marzban/openapi.v0.8.4.json
 artifacts/
+build/
+drizzle/meta/
 node_modules/
+.svelte-kit/

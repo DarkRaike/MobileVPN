@@ -1,16 +1,15 @@
 {
+  "extends": "./.svelte-kit/tsconfig.json",
   "compilerOptions": {
     "allowJs": true,
     "checkJs": true,
+    "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "noEmit": true,
+    "moduleResolution": "bundler",
     "noImplicitOverride": true,
     "noUncheckedIndexedAccess": true,
     "strict": true,
     "target": "ES2024",
-    "types": ["node"]
-  },
-  "include": ["eslint.config.js", "scripts/**/*.mjs", "tests/**/*.mjs"]
+    "types": ["node", "vitest/globals"]
+  }
 }
