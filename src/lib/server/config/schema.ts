@@ -50,11 +50,32 @@ const environmentSchema = z
         .optional(),
     ),
     ENABLE_DEV_MOCK_AUTH: booleanFromEnvironment.default(false),
+    ENABLE_LIVE_OPERATIONS: booleanFromEnvironment.default(false),
+    MARZBAN_BASE_URL: z.preprocess(
+      emptyStringToUndefined,
+      z.string().url().optional(),
+    ),
+    MARZBAN_PASSWORD: z.preprocess(
+      emptyStringToUndefined,
+      z.string().min(1).max(256).optional(),
+    ),
+    MARZBAN_USERNAME: z.preprocess(
+      emptyStringToUndefined,
+      z.string().min(1).max(128).optional(),
+    ),
+    MARZBAN_VLESS_INBOUND_TAG: z.preprocess(
+      emptyStringToUndefined,
+      z.string().trim().min(1).max(128).default("VLESS_TCP_REALITY_V1"),
+    ),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
     ORIGIN: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
     SESSION_SECRET: z.string().min(32),
+    SUBSCRIPTION_URL_ENCRYPTION_KEY: z.preprocess(
+      emptyStringToUndefined,
+      z.string().min(43).max(44).optional(),
+    ),
     TELEGRAM_ADMIN_USER_ID: z.preprocess(
       emptyStringToUndefined,
       z
@@ -75,6 +96,13 @@ const environmentSchema = z
       .min(60)
       .max(3600)
       .default(300),
+    TELEGRAM_WEBHOOK_SECRET: z.preprocess(
+      emptyStringToUndefined,
+      z
+        .string()
+        .regex(/^[A-Za-z0-9_-]{16,256}$/)
+        .optional(),
+    ),
   })
   .superRefine((environment, context) => {
     if (
@@ -126,6 +154,30 @@ const environmentSchema = z
         path: ["ORIGIN"],
       });
     }
+
+    if (environment.ENABLE_LIVE_OPERATIONS) {
+      const requiredLiveFields = [
+        ["MARZBAN_BASE_URL", environment.MARZBAN_BASE_URL],
+        ["MARZBAN_PASSWORD", environment.MARZBAN_PASSWORD],
+        ["MARZBAN_USERNAME", environment.MARZBAN_USERNAME],
+        [
+          "SUBSCRIPTION_URL_ENCRYPTION_KEY",
+          environment.SUBSCRIPTION_URL_ENCRYPTION_KEY,
+        ],
+        ["TELEGRAM_BOT_TOKEN", environment.TELEGRAM_BOT_TOKEN],
+        ["TELEGRAM_WEBHOOK_SECRET", environment.TELEGRAM_WEBHOOK_SECRET],
+      ] as const;
+
+      for (const [field, value] of requiredLiveFields) {
+        if (!value) {
+          context.addIssue({
+            code: "custom",
+            message: `${field} is required when live operations are enabled`,
+            path: [field],
+          });
+        }
+      }
+    }
   });
 
 export interface RuntimeConfig {
@@ -138,12 +190,21 @@ export interface RuntimeConfig {
     username?: string;
   };
   isProduction: boolean;
+  liveOperationsEnabled: boolean;
+  marzban?: {
+    baseUrl: string;
+    password: string;
+    username: string;
+    vlessInboundTag: string;
+  };
   nodeEnvironment: "development" | "test" | "production";
   origin?: string;
   sessionSecret: string;
+  subscriptionUrlEncryptionKey?: string;
   telegramAdminUserId?: string;
   telegramBotToken?: string;
   telegramInitDataMaxAgeSeconds: number;
+  telegramWebhookSecret?: string;
 }
 
 export class ConfigurationError extends Error {
@@ -172,6 +233,15 @@ export function parseRuntimeConfig(
   }
 
   const value = result.data;
+  const marzban =
+    value.MARZBAN_BASE_URL && value.MARZBAN_PASSWORD && value.MARZBAN_USERNAME
+      ? {
+          baseUrl: value.MARZBAN_BASE_URL.replace(/\/+$/u, ""),
+          password: value.MARZBAN_PASSWORD,
+          username: value.MARZBAN_USERNAME,
+          vlessInboundTag: value.MARZBAN_VLESS_INBOUND_TAG,
+        }
+      : undefined;
 
   return {
     databaseUrl: value.DATABASE_URL,
@@ -183,11 +253,15 @@ export function parseRuntimeConfig(
       username: value.DEV_MOCK_USERNAME,
     },
     isProduction: value.NODE_ENV === "production",
+    liveOperationsEnabled: value.ENABLE_LIVE_OPERATIONS,
+    marzban,
     nodeEnvironment: value.NODE_ENV,
     origin: value.ORIGIN,
     sessionSecret: value.SESSION_SECRET,
+    subscriptionUrlEncryptionKey: value.SUBSCRIPTION_URL_ENCRYPTION_KEY,
     telegramAdminUserId: value.TELEGRAM_ADMIN_USER_ID,
     telegramBotToken: value.TELEGRAM_BOT_TOKEN,
     telegramInitDataMaxAgeSeconds: value.TELEGRAM_INIT_DATA_MAX_AGE_SECONDS,
+    telegramWebhookSecret: value.TELEGRAM_WEBHOOK_SECRET,
   };
 }

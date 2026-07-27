@@ -79,4 +79,26 @@ describe("parseRuntimeConfig", () => {
       }),
     );
   });
+
+  it("requires every provider secret before live operations are enabled", () => {
+    expect(() =>
+      parseRuntimeConfig({
+        ENABLE_DEV_MOCK_AUTH: "true",
+        ENABLE_LIVE_OPERATIONS: "true",
+        NODE_ENV: "development",
+        SESSION_SECRET,
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        fields: [
+          "MARZBAN_BASE_URL",
+          "MARZBAN_PASSWORD",
+          "MARZBAN_USERNAME",
+          "SUBSCRIPTION_URL_ENCRYPTION_KEY",
+          "TELEGRAM_BOT_TOKEN",
+          "TELEGRAM_WEBHOOK_SECRET",
+        ],
+      }),
+    );
+  });
 });
