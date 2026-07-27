@@ -6,6 +6,7 @@ services:
     init: true
     environment:
       DATABASE_URL: /data/astra-vpn.sqlite
+      BACKUP_STATUS_FILE: /data/backup-status.json
       ENABLE_DEV_MOCK_AUTH: ${ENABLE_DEV_MOCK_AUTH:-false}
       ENABLE_LIVE_OPERATIONS: ${ENABLE_LIVE_OPERATIONS:-false}
       INTERNAL_JOB_SECRET: ${INTERNAL_JOB_SECRET:-}
@@ -13,6 +14,7 @@ services:
       MARZBAN_PASSWORD: ${MARZBAN_PASSWORD:-}
       MARZBAN_USERNAME: ${MARZBAN_USERNAME:-}
       MARZBAN_VLESS_INBOUND_TAG: ${MARZBAN_VLESS_INBOUND_TAG:-VLESS_TCP_REALITY_V1}
+      MONITORING_SECRET: ${MONITORING_SECRET:-}
       NODE_ENV: development
       ORIGIN: http://localhost:5173
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
@@ -41,7 +43,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:5173/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:5173/readyz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 3s
@@ -69,6 +71,30 @@ services:
       - npm
       - run
       - jobs:run
+    restart: unless-stopped
+
+  monitoring:
+    build:
+      context: .
+      target: development
+    init: true
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      ALERT_REPEAT_MILLISECONDS: ${ALERT_REPEAT_MILLISECONDS:-1800000}
+      ALERT_TELEGRAM_CHAT_ID: ${ALERT_TELEGRAM_CHAT_ID:-}
+      MONITORING_API_URL: http://app:5173/api/internal/monitoring
+      MONITORING_INTERVAL_MILLISECONDS: ${MONITORING_INTERVAL_MILLISECONDS:-60000}
+      MONITORING_SECRET: ${MONITORING_SECRET:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    volumes:
+      - .:/app
+      - app-node-modules:/app/node_modules
+    command:
+      - npm
+      - run
+      - monitoring:run
     restart: unless-stopped
 
 volumes:

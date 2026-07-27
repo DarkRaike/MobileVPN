@@ -10,6 +10,7 @@ import { validateSession } from "$lib/server/auth/sessions";
 import { getRuntimeConfig } from "$lib/server/config/runtime";
 import { getDatabase } from "$lib/server/db/runtime";
 import { logEvent } from "$lib/server/observability/logger";
+import { recordRequestOutcome } from "$lib/server/observability/metrics";
 import { applySecurityHeaders } from "$lib/server/security/headers";
 
 export const handle: Handle = async ({ event, resolve }) => {
@@ -41,6 +42,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     }
 
     const response = await resolve(event);
+    recordRequestOutcome(event.url.pathname, response.status);
 
     applySecurityHeaders(response.headers, config.isProduction);
     response.headers.set("X-Request-Id", requestId);
@@ -65,6 +67,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
     return response;
   } catch (error) {
+    recordRequestOutcome(event.url.pathname, 500);
     logEvent("error", {
       durationMilliseconds: Date.now() - startedAt,
       errorCode: "REQUEST_FAILED",

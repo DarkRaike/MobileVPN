@@ -27,6 +27,7 @@
     "db:seed": "tsx scripts/seed.ts",
     "db:check": "tsx scripts/check-migrations.ts",
     "jobs:run": "node scripts/reconciliation-worker.mjs",
+    "monitoring:run": "node scripts/monitoring-worker.mjs",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run db:check && npm run build && npm run build:contracts"
   },
   "devDependencies": {

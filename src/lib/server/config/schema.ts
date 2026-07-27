@@ -32,6 +32,10 @@ const environmentSchema = z
       emptyStringToUndefined,
       z.string().trim().toLowerCase().optional(),
     ),
+    BACKUP_STATUS_FILE: z.preprocess(
+      emptyStringToUndefined,
+      z.string().trim().min(1).default("./data/backup-status.json"),
+    ),
     DATABASE_URL: z.preprocess(
       emptyStringToUndefined,
       z.string().trim().min(1).default("./data/astra-vpn.sqlite"),
@@ -83,6 +87,13 @@ const environmentSchema = z
     MARZBAN_VLESS_INBOUND_TAG: z.preprocess(
       emptyStringToUndefined,
       z.string().trim().min(1).max(128).default("VLESS_TCP_REALITY_V1"),
+    ),
+    MONITORING_SECRET: z.preprocess(
+      emptyStringToUndefined,
+      z
+        .string()
+        .regex(/^[A-Za-z0-9_-]{32,256}$/)
+        .optional(),
     ),
     NODE_ENV: z
       .enum(["development", "test", "production"])
@@ -205,6 +216,22 @@ const environmentSchema = z
           path: ["DATABASE_URL"],
         });
       }
+
+      if (!environment.BACKUP_STATUS_FILE.startsWith("/")) {
+        context.addIssue({
+          code: "custom",
+          message: "Production backup status path must be absolute",
+          path: ["BACKUP_STATUS_FILE"],
+        });
+      }
+
+      if (!environment.MONITORING_SECRET) {
+        context.addIssue({
+          code: "custom",
+          message: "Monitoring secret is required in production",
+          path: ["MONITORING_SECRET"],
+        });
+      }
     }
 
     if (
@@ -313,6 +340,7 @@ const environmentSchema = z
   });
 
 export interface RuntimeConfig {
+  backupStatusFile: string;
   baseDomain?: string;
   databaseUrl: string;
   developmentMock: {
@@ -331,6 +359,7 @@ export interface RuntimeConfig {
     username: string;
     vlessInboundTag: string;
   };
+  monitoringSecret?: string;
   nodeEnvironment: "development" | "test" | "production";
   origin?: string;
   sessionSecret: string;
@@ -379,6 +408,7 @@ export function parseRuntimeConfig(
       : undefined;
 
   return {
+    backupStatusFile: value.BACKUP_STATUS_FILE,
     baseDomain: value.BASE_DOMAIN,
     databaseUrl: value.DATABASE_URL,
     developmentMock: {
@@ -392,6 +422,7 @@ export function parseRuntimeConfig(
     internalJobSecret: value.INTERNAL_JOB_SECRET,
     liveOperationsEnabled: value.ENABLE_LIVE_OPERATIONS,
     marzban,
+    monitoringSecret: value.MONITORING_SECRET,
     nodeEnvironment: value.NODE_ENV,
     origin: value.ORIGIN,
     sessionSecret: value.SESSION_SECRET,

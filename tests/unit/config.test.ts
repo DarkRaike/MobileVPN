@@ -4,9 +4,11 @@ import { parseRuntimeConfig } from "../../src/lib/server/config/schema";
 
 const SESSION_SECRET = "test-session-secret-with-at-least-32-chars";
 const PRODUCTION_ENVIRONMENT = {
+  BACKUP_STATUS_FILE: "/data/backup-status.json",
   BASE_DOMAIN: "astra-vpn.ru",
   DATABASE_URL: "/data/astra-vpn.sqlite",
   NODE_ENV: "production",
+  MONITORING_SECRET: "m".repeat(32),
   ORIGIN: "https://app.astra-vpn.ru",
   SESSION_SECRET: "s".repeat(64),
   TELEGRAM_ADMIN_USER_ID: "123456789",
