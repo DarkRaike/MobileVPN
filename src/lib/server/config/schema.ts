@@ -4,6 +4,7 @@ import { productionReadinessApproved } from "./production-readiness";
 
 const PRODUCTION_DOMAIN_PATTERN =
   /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/u;
+const TELEGRAM_API_BASE_URL = "https://api.telegram.org";
 
 const booleanFromEnvironment = z.preprocess((value) => {
   if (typeof value !== "string") {
@@ -101,6 +102,10 @@ const environmentSchema = z
         .string()
         .regex(/^\d{1,20}$/)
         .optional(),
+    ),
+    TELEGRAM_API_BASE_URL: z.preprocess(
+      emptyStringToUndefined,
+      z.string().url().default(TELEGRAM_API_BASE_URL),
     ),
     TELEGRAM_BOT_TOKEN: z.preprocess(
       emptyStringToUndefined,
@@ -226,6 +231,17 @@ const environmentSchema = z
     }
 
     if (
+      environment.NODE_ENV !== "test" &&
+      environment.TELEGRAM_API_BASE_URL !== TELEGRAM_API_BASE_URL
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Telegram API base URL can only be overridden in tests",
+        path: ["TELEGRAM_API_BASE_URL"],
+      });
+    }
+
+    if (
       environment.ENABLE_LIVE_OPERATIONS &&
       environment.ENABLE_DEV_MOCK_AUTH
     ) {
@@ -320,6 +336,7 @@ export interface RuntimeConfig {
   sessionSecret: string;
   subscriptionUrlEncryptionKey?: string;
   telegramAdminUserId?: string;
+  telegramApiBaseUrl: string;
   telegramBotToken?: string;
   telegramInitDataMaxAgeSeconds: number;
   telegramWebhookSecret?: string;
@@ -380,6 +397,7 @@ export function parseRuntimeConfig(
     sessionSecret: value.SESSION_SECRET,
     subscriptionUrlEncryptionKey: value.SUBSCRIPTION_URL_ENCRYPTION_KEY,
     telegramAdminUserId: value.TELEGRAM_ADMIN_USER_ID,
+    telegramApiBaseUrl: value.TELEGRAM_API_BASE_URL.replace(/\/+$/u, ""),
     telegramBotToken: value.TELEGRAM_BOT_TOKEN,
     telegramInitDataMaxAgeSeconds: value.TELEGRAM_INIT_DATA_MAX_AGE_SECONDS,
     telegramWebhookSecret: value.TELEGRAM_WEBHOOK_SECRET,

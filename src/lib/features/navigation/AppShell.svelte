@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { pushState, replaceState } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { onMount } from "svelte";
 
   import type { AuthenticatedUser } from "$lib/server/auth/sessions";
@@ -60,24 +62,15 @@
   );
 
   function updateUrl(index: SectionIndex, replace: boolean): void {
-    const url = new URL(window.location.href);
     const section = sections[index];
-
-    if (section.id === "home") {
-      url.searchParams.delete("section");
-    } else {
-      url.searchParams.set("section", section.id);
-    }
-
-    const state = {
-      ...(window.history.state as Record<string, unknown> | null),
-      astraSection: section.id,
-    };
+    const state = { astraSection: section.id };
+    const destination =
+      section.id === "home" ? resolve("/") : resolve(`/?section=${section.id}`);
 
     if (replace) {
-      window.history.replaceState(state, "", url);
+      replaceState(destination, state);
     } else {
-      window.history.pushState(state, "", url);
+      pushState(destination, state);
     }
   }
 
@@ -208,7 +201,7 @@
       new URL(window.location.href).searchParams.get("section"),
     );
 
-    goTo(initialIndex, { history: "replace" });
+    goTo(initialIndex, { history: "none" });
 
     const handlePopState = () => {
       goTo(

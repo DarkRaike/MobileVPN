@@ -3,7 +3,9 @@ artifacts/
 build/
 coverage/
 data/
+playwright-report/
 .svelte-kit/
+test-results/
 
 .env
 .env.*

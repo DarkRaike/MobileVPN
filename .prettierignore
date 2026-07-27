@@ -4,6 +4,8 @@ vpn-mini-app.html
 contracts/marzban/openapi.v0.8.4.json
 artifacts/
 build/
+playwright-report/
 drizzle/meta/
 node_modules/
 .svelte-kit/
+test-results/

@@ -12,7 +12,9 @@ export function getTelegramStarsPayments(
 ): TelegramStarsPayments {
   paymentAdapter ??=
     config.liveOperationsEnabled && config.telegramBotToken
-      ? new TelegramStarsAdapter(config.telegramBotToken)
+      ? new TelegramStarsAdapter(config.telegramBotToken, {
+          apiBaseUrl: config.telegramApiBaseUrl,
+        })
       : new UnavailableTelegramStarsAdapter();
 
   return paymentAdapter;

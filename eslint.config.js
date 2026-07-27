@@ -12,6 +12,8 @@ export default [
       "contracts/marzban/openapi.v0.8.4.json",
       "drizzle/**",
       "node_modules/**",
+      "playwright-report/**",
+      "test-results/**",
       "vpn-mini-app.html",
     ],
   },

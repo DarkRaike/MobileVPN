@@ -17,7 +17,7 @@ describe("TelegramStarsAdapter", () => {
         { status: 200 },
       ),
     );
-    const adapter = new TelegramStarsAdapter("123:fixture-token", request);
+    const adapter = new TelegramStarsAdapter("123:fixture-token", { request });
 
     const invoiceUrl = await adapter.createInvoiceLink({
       amountStars: 249,

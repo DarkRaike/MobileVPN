@@ -53,6 +53,40 @@ describe("parseRuntimeConfig", () => {
     );
   });
 
+  it("uses the official Telegram API endpoint outside tests", () => {
+    const config = parseRuntimeConfig({
+      ENABLE_DEV_MOCK_AUTH: "true",
+      NODE_ENV: "development",
+      SESSION_SECRET,
+    });
+
+    expect(config.telegramApiBaseUrl).toBe("https://api.telegram.org");
+  });
+
+  it("only allows overriding the Telegram API endpoint in tests", () => {
+    expect(() =>
+      parseRuntimeConfig({
+        ENABLE_DEV_MOCK_AUTH: "true",
+        NODE_ENV: "development",
+        SESSION_SECRET,
+        TELEGRAM_API_BASE_URL: "http://127.0.0.1:4174",
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        fields: ["TELEGRAM_API_BASE_URL"],
+      }),
+    );
+
+    expect(
+      parseRuntimeConfig({
+        ENABLE_DEV_MOCK_AUTH: "true",
+        NODE_ENV: "test",
+        SESSION_SECRET,
+        TELEGRAM_API_BASE_URL: "http://127.0.0.1:4174/",
+      }).telegramApiBaseUrl,
+    ).toBe("http://127.0.0.1:4174");
+  });
+
   it("requires a Telegram bot token when mock auth is disabled", () => {
     expect(() =>
       parseRuntimeConfig({

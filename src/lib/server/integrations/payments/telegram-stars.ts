@@ -38,6 +38,7 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const DEFAULT_TIMEOUT_MILLISECONDS = 8_000;
 const DEFAULT_MAX_ATTEMPTS = 3;
+const DEFAULT_API_BASE_URL = "https://api.telegram.org";
 
 export interface CreateStarsInvoiceInput {
   amountStars: number;
@@ -85,6 +86,12 @@ export interface TelegramStarsPayments {
   refundPayment(input: RefundStarsPaymentInput): Promise<void>;
 }
 
+interface TelegramStarsAdapterOptions {
+  apiBaseUrl?: string;
+  request?: typeof fetch;
+  timeoutMilliseconds?: number;
+}
+
 export function createStarsInvoicePayload(paymentAttemptId: string): string {
   if (!UUID_PATTERN.test(paymentAttemptId)) {
     throw new ApplicationError(
@@ -130,11 +137,22 @@ function delay(milliseconds: number): Promise<void> {
 }
 
 export class TelegramStarsAdapter implements TelegramStarsPayments {
+  private readonly apiBaseUrl: string;
+  private readonly request: typeof fetch;
+  private readonly timeoutMilliseconds: number;
+
   constructor(
     private readonly botToken: string,
-    private readonly request: typeof fetch = fetch,
-    private readonly timeoutMilliseconds = DEFAULT_TIMEOUT_MILLISECONDS,
-  ) {}
+    options: TelegramStarsAdapterOptions = {},
+  ) {
+    this.apiBaseUrl = (options.apiBaseUrl ?? DEFAULT_API_BASE_URL).replace(
+      /\/+$/u,
+      "",
+    );
+    this.request = options.request ?? fetch;
+    this.timeoutMilliseconds =
+      options.timeoutMilliseconds ?? DEFAULT_TIMEOUT_MILLISECONDS;
+  }
 
   async createInvoiceLink(input: CreateStarsInvoiceInput): Promise<string> {
     assertPositiveStars(input.amountStars);
@@ -260,7 +278,7 @@ export class TelegramStarsAdapter implements TelegramStarsPayments {
 
       try {
         const response = await this.request(
-          `https://api.telegram.org/bot${this.botToken}/${method}`,
+          `${this.apiBaseUrl}/bot${this.botToken}/${method}`,
           {
             body: JSON.stringify(body),
             headers: { "content-type": "application/json" },

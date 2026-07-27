@@ -22,6 +22,10 @@ declare global {
       session: AuthenticatedSession | null;
       user: AuthenticatedUser | null;
     }
+
+    interface PageState {
+      astraSection?: "support" | "home" | "profile";
+    }
   }
 }
 

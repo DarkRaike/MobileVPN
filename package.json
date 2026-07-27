@@ -17,6 +17,9 @@
     "test": "npm run test:contracts && npm run test:unit",
     "test:contracts": "node --test tests/contracts/*.test.mjs",
     "test:unit": "vitest run",
+    "test:e2e": "playwright test",
+    "e2e:prepare": "tsx scripts/e2e-setup.ts",
+    "e2e:serve": "npm run e2e:prepare && vite dev --host 127.0.0.1 --port 4173",
     "build": "vite build",
     "build:contracts": "node scripts/build-contract-bundle.mjs",
     "db:generate": "drizzle-kit generate",
@@ -28,6 +31,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.62.0",
     "@sveltejs/adapter-node": "5.5.7",
     "@sveltejs/kit": "2.70.1",
     "@tailwindcss/vite": "4.3.3",
