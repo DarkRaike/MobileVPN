@@ -22,12 +22,14 @@
     feedback,
     plans,
     profileOverview,
+    purchaseRequest,
     purchasesEnabled,
     user,
   }: {
     feedback: AppActionFeedback | null;
     plans: CatalogPlan[];
     profileOverview: Awaited<ReturnType<typeof getProfileOverview>>;
+    purchaseRequest: number;
     purchasesEnabled: boolean;
     user: AuthenticatedUser | null;
   } = $props();
@@ -38,6 +40,7 @@
   let submittingPlanId = $state<string | null>(null);
   let submittingPromo = $state(false);
   let termsAccepted = $state(false);
+  let handledPurchaseRequest = 0;
   const purchaseAttemptKeys = new SvelteMap<string, string>();
   const subscription = $derived(profileOverview.subscription);
   const isAuthenticated = $derived(user !== null);
@@ -66,6 +69,16 @@
       timeZone: "UTC",
       year: "numeric",
     }).format(value);
+  }
+
+  function formatTrafficUsage(bytes: number | null): string {
+    if (bytes === null) {
+      return "Нет данных";
+    }
+
+    return `${new Intl.NumberFormat("ru-RU", {
+      maximumFractionDigits: 1,
+    }).format(bytes / 1024 ** 3)} ГБ`;
   }
 
   function getStoredPromoCode(): string {
@@ -221,6 +234,13 @@
       }
     }
   });
+
+  $effect(() => {
+    if (purchaseRequest > handledPurchaseRequest) {
+      handledPurchaseRequest = purchaseRequest;
+      openPurchaseSheet();
+    }
+  });
 </script>
 
 <header class="mb-6">
@@ -289,7 +309,7 @@
         </div>
         <div>
           <dt>Использовано</dt>
-          <dd>Данные синхронизируются</dd>
+          <dd>{formatTrafficUsage(subscription.usedTrafficBytes)}</dd>
         </div>
       </dl>
     {:else if subscription.status === "provisioning" || subscription.status === "provisioning_failed"}

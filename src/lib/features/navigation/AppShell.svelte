@@ -52,6 +52,7 @@
   let pointerId: number | null = null;
   let pointerStartX = 0;
   let pointerStartY = 0;
+  let purchaseRequest = $state(0);
   let horizontalGesture = false;
   let hydrated = $state(false);
 
@@ -206,6 +207,11 @@
     goTo(index, { history: "push" });
   }
 
+  function openPurchaseSheet(): void {
+    purchaseRequest += 1;
+    goTo(1, { history: "push" });
+  }
+
   onMount(() => {
     hydrated = true;
     const initialIndex = getSectionIndex(
@@ -290,6 +296,7 @@
         {feedback}
         plans={activePlans}
         {profileOverview}
+        {purchaseRequest}
         {purchasesEnabled}
         {user}
       />
@@ -307,7 +314,7 @@
         {profileOverview}
         {sessionExpiresAt}
         {user}
-        onNavigate={(index) => goTo(index, { history: "push" })}
+        onPurchase={openPurchaseSheet}
       />
     </section>
   </div>

@@ -49,6 +49,7 @@ function marzbanUser(input: MarzbanUserInput): MarzbanUser {
     inbounds: { vless: ["VLESS_TCP_REALITY_V1"] },
     status: "active",
     subscriptionUrl: "https://sub.example.com/sub/secret-token",
+    usedTrafficBytes: 0,
     username: input.username,
   };
 }

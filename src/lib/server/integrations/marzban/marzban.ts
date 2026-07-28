@@ -14,6 +14,13 @@ const marzbanUserSchema = z
     proxies: z.record(z.string(), z.unknown()),
     status: z.enum(["active", "disabled", "expired", "limited", "on_hold"]),
     subscription_url: z.string().min(1).max(4_096),
+    used_traffic: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(Number.MAX_SAFE_INTEGER)
+      .nullable()
+      .optional(),
     username: z.string().regex(/^[a-z0-9_]{3,32}$/u),
   })
   .passthrough();
@@ -27,6 +34,7 @@ export interface MarzbanUser {
   inbounds: Record<string, string[]>;
   status: "active" | "disabled" | "expired" | "limited" | "on_hold";
   subscriptionUrl: string;
+  usedTrafficBytes: number | null;
   username: string;
 }
 
@@ -72,6 +80,7 @@ function normalizeUser(value: unknown): MarzbanUser {
     inbounds: user.inbounds,
     status: user.status,
     subscriptionUrl: user.subscription_url,
+    usedTrafficBytes: user.used_traffic ?? null,
     username: user.username,
   };
 }

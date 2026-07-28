@@ -10,14 +10,14 @@
   let {
     feedback,
     isAdmin,
-    onNavigate,
+    onPurchase,
     profileOverview,
     sessionExpiresAt,
     user,
   }: {
     feedback: AppActionFeedback | null;
     isAdmin: boolean;
-    onNavigate: (index: number) => void;
+    onPurchase: () => void;
     profileOverview: Awaited<ReturnType<typeof getProfileOverview>>;
     sessionExpiresAt: Date | null;
     user: AuthenticatedUser | null;
@@ -151,7 +151,7 @@
     <button
       class="plan-action plan-action-primary"
       type="button"
-      onclick={() => onNavigate(1)}
+      onclick={onPurchase}
     >
       Продлить
     </button>
@@ -160,7 +160,7 @@
         Настроить
       </a>
     {:else}
-      <button class="plan-action" type="button" onclick={() => onNavigate(1)}>
+      <button class="plan-action" type="button" onclick={onPurchase}>
         Выбрать тариф
       </button>
     {/if}

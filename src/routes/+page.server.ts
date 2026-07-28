@@ -9,6 +9,7 @@ import {
 import { revokeSession } from "$lib/server/auth/sessions";
 import { getRuntimeConfig } from "$lib/server/config/runtime";
 import { getDatabase } from "$lib/server/db/runtime";
+import { getMarzban } from "$lib/server/integrations/marzban/runtime";
 import { getTelegramStarsPayments } from "$lib/server/integrations/payments/runtime";
 import {
   TelegramSupportNotifier,
@@ -97,10 +98,16 @@ export const load: PageServerLoad = async ({ locals }) => {
   ]);
 
   if (locals.user) {
+    const marzban = config.liveOperationsEnabled
+      ? getMarzban(config)
+      : undefined;
+
     profileOverview = await getProfileOverview(
       database,
       locals.user.id,
       config.subscriptionUrlEncryptionKey,
+      undefined,
+      marzban,
     );
   }
 
