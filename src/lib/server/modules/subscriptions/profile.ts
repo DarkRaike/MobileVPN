@@ -122,7 +122,7 @@ export async function getProfileOverview(
 
       subscriptionView = {
         expiresAt: subscription.expiresAt,
-        planName: activeOrderRecords[0]?.planName ?? "Astra VPN",
+        planName: activeOrderRecords[0]?.planName ?? "VPN-доступ",
         qrCodeDataUrl,
         startsAt: subscription.startsAt,
         status: "active",

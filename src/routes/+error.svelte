@@ -6,7 +6,7 @@
 </script>
 
 <svelte:head>
-  <title>Ошибка · Astra VPN</title>
+  <title>Ошибка</title>
 </svelte:head>
 
 <main class="auth-shell">

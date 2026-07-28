@@ -86,24 +86,22 @@ function actionError(
 
 export const load: PageServerLoad = async ({ locals }) => {
   const config = getRuntimeConfig();
-  let activePlans: Awaited<ReturnType<typeof listActivePlans>> = [];
-  let faqItems: Awaited<ReturnType<typeof listPublishedFaq>> = [];
   let profileOverview: Awaited<ReturnType<typeof getProfileOverview>> = {
     purchaseHistory: [],
     subscription: { status: "none" },
   };
+  const { database } = await getDatabase();
+  const [activePlans, faqItems] = await Promise.all([
+    listActivePlans(database),
+    listPublishedFaq(database),
+  ]);
 
   if (locals.user) {
-    const { database } = await getDatabase();
-    [activePlans, faqItems, profileOverview] = await Promise.all([
-      listActivePlans(database),
-      listPublishedFaq(database),
-      getProfileOverview(
-        database,
-        locals.user.id,
-        config.subscriptionUrlEncryptionKey,
-      ),
-    ]);
+    profileOverview = await getProfileOverview(
+      database,
+      locals.user.id,
+      config.subscriptionUrlEncryptionKey,
+    );
   }
 
   return {

@@ -1,4 +1,4 @@
-# Astra VPN Mini App
+# VPN Mini App
 
 Telegram Mini App для покупки и управления VPN-доступом. Проект строится как
 модульный монолит на SvelteKit, Svelte 5, TypeScript, Tailwind CSS, Drizzle ORM

@@ -42,7 +42,7 @@
     profileOverview: Awaited<ReturnType<typeof getProfileOverview>>;
     purchasesEnabled: boolean;
     sessionExpiresAt: Date | null;
-    user: AuthenticatedUser;
+    user: AuthenticatedUser | null;
   } = $props();
 
   let activeIndex = $state<SectionIndex>(1);
@@ -53,6 +53,7 @@
   let pointerStartX = 0;
   let pointerStartY = 0;
   let horizontalGesture = false;
+  let hydrated = $state(false);
 
   const trackTransform = $derived(
     `translate3d(calc(${-activeIndex * 100}% + ${dragOffset}px), 0, 0)`,
@@ -104,13 +105,17 @@
   }
 
   function isInteractiveTarget(target: EventTarget | null): boolean {
-    return (
-      target instanceof Element &&
-      Boolean(
-        target.closest(
-          "a, button, input, select, textarea, summary, [data-no-swipe]",
-        ),
-      )
+    const element =
+      target instanceof Element
+        ? target
+        : target instanceof Node
+          ? target.parentElement
+          : null;
+
+    return Boolean(
+      element?.closest(
+        "a, button, input, select, textarea, summary, [data-no-swipe]",
+      ),
     );
   }
 
@@ -196,7 +201,13 @@
     }
   }
 
+  function navigateToSection(event: MouseEvent, index: number): void {
+    event.preventDefault();
+    goTo(index, { history: "push" });
+  }
+
   onMount(() => {
+    hydrated = true;
     const initialIndex = getSectionIndex(
       new URL(window.location.href).searchParams.get("section"),
     );
@@ -252,6 +263,7 @@
 
 <main
   class="mini-app"
+  data-hydrated={hydrated ? "true" : "false"}
   bind:this={appElement}
   onpointerdown={handlePointerDown}
   onpointermove={handlePointerMove}
@@ -277,9 +289,9 @@
       <HomeSection
         {feedback}
         plans={activePlans}
+        {profileOverview}
         {purchasesEnabled}
         {user}
-        onNavigate={(index) => goTo(index, { history: "push" })}
       />
     </section>
 
@@ -308,16 +320,14 @@
     ></span>
     <div class="relative grid grid-cols-3">
       {#each sections as section, index (section.id)}
-        <button
+        <a
           class:active={activeIndex === index}
           class="nav-item"
-          type="button"
+          href={section.id === "home"
+            ? resolve("/")
+            : resolve(`/?section=${section.id}`)}
           aria-current={activeIndex === index ? "page" : undefined}
-          onclick={(event) =>
-            goTo(index, {
-              focus: event.detail === 0,
-              history: "push",
-            })}
+          onclick={(event) => navigateToSection(event, index)}
         >
           <AppIcon
             name={section.id === "home"
@@ -328,7 +338,7 @@
             size={24}
           />
           <span>{section.label}</span>
-        </button>
+        </a>
       {/each}
     </div>
   </nav>

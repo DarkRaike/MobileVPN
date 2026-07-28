@@ -50,18 +50,15 @@
 </script>
 
 <svelte:head>
-  <title>Администрирование · Astra VPN</title>
-  <meta
-    name="description"
-    content="Защищённый административный раздел Astra VPN"
-  />
+  <title>Администрирование · VPN</title>
+  <meta name="description" content="Защищённый административный раздел VPN" />
 </svelte:head>
 
 <main class="admin-page">
   <div class="admin-container">
     <header class="mb-5 flex items-center justify-between gap-4">
       <div class="min-w-0">
-        <p class="admin-eyebrow">Astra VPN</p>
+        <p class="admin-eyebrow">VPN</p>
         <h1 class="truncate text-[28px] font-semibold tracking-[-0.03em]">
           Администрирование
         </h1>
