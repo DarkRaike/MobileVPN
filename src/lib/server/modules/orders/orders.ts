@@ -116,7 +116,7 @@ async function prepareOrder(
         label: existing.planName,
         orderId: existing.orderId,
         paymentAttemptId: existing.paymentAttemptId,
-        title: `Astra VPN · ${existing.planName}`,
+        title: `VPN · ${existing.planName}`,
       };
     }
 
@@ -260,7 +260,7 @@ async function prepareOrder(
       label: plan.name,
       orderId,
       paymentAttemptId,
-      title: `Astra VPN · ${plan.name}`,
+      title: `VPN · ${plan.name}`,
     };
   });
 }

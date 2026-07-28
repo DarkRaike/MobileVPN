@@ -47,6 +47,7 @@ describe("MarzbanAdapter", () => {
     expect(user.subscriptionUrl).toBe(
       "https://sub.example.com/sub/fixture-token",
     );
+    expect(user.usedTrafficBytes).toBe(0);
     const createRequest = request.mock.calls[1];
     const body = JSON.parse(
       String((createRequest?.[1] as RequestInit | undefined)?.body),

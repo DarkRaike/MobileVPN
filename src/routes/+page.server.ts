@@ -9,6 +9,7 @@ import {
 import { revokeSession } from "$lib/server/auth/sessions";
 import { getRuntimeConfig } from "$lib/server/config/runtime";
 import { getDatabase } from "$lib/server/db/runtime";
+import { getMarzban } from "$lib/server/integrations/marzban/runtime";
 import { getTelegramStarsPayments } from "$lib/server/integrations/payments/runtime";
 import {
   TelegramSupportNotifier,
@@ -86,24 +87,28 @@ function actionError(
 
 export const load: PageServerLoad = async ({ locals }) => {
   const config = getRuntimeConfig();
-  let activePlans: Awaited<ReturnType<typeof listActivePlans>> = [];
-  let faqItems: Awaited<ReturnType<typeof listPublishedFaq>> = [];
   let profileOverview: Awaited<ReturnType<typeof getProfileOverview>> = {
     purchaseHistory: [],
     subscription: { status: "none" },
   };
+  const { database } = await getDatabase();
+  const [activePlans, faqItems] = await Promise.all([
+    listActivePlans(database),
+    listPublishedFaq(database),
+  ]);
 
   if (locals.user) {
-    const { database } = await getDatabase();
-    [activePlans, faqItems, profileOverview] = await Promise.all([
-      listActivePlans(database),
-      listPublishedFaq(database),
-      getProfileOverview(
-        database,
-        locals.user.id,
-        config.subscriptionUrlEncryptionKey,
-      ),
-    ]);
+    const marzban = config.liveOperationsEnabled
+      ? getMarzban(config)
+      : undefined;
+
+    profileOverview = await getProfileOverview(
+      database,
+      locals.user.id,
+      config.subscriptionUrlEncryptionKey,
+      undefined,
+      marzban,
+    );
   }
 
   return {

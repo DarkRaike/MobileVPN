@@ -1,46 +1,55 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
-  import { invalidateAll } from "$app/navigation";
+  import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import type { SubmitFunction } from "@sveltejs/kit";
+  import { onMount } from "svelte";
   import { SvelteMap } from "svelte/reactivity";
 
-  import type { AuthenticatedUser } from "$lib/server/auth/sessions";
+  import AppIcon from "$lib/components/AppIcon.svelte";
   import type {
     AppActionFeedback,
     CatalogPlan,
   } from "$lib/features/catalog/types";
+  import type { AuthenticatedUser } from "$lib/server/auth/sessions";
+  import type { getProfileOverview } from "$lib/server/modules/subscriptions/profile";
   import {
     getTelegramWebApp,
     isTelegramVersionAtLeast,
   } from "$lib/telegram/web-app";
 
-  import AppIcon from "$lib/components/AppIcon.svelte";
-  import UserAvatar from "$lib/components/UserAvatar.svelte";
-
   let {
     feedback,
-    onNavigate,
     plans,
+    profileOverview,
+    purchaseRequest,
     purchasesEnabled,
     user,
   }: {
     feedback: AppActionFeedback | null;
-    onNavigate: (index: number) => void;
     plans: CatalogPlan[];
+    profileOverview: Awaited<ReturnType<typeof getProfileOverview>>;
+    purchaseRequest: number;
     purchasesEnabled: boolean;
-    user: AuthenticatedUser;
+    user: AuthenticatedUser | null;
   } = $props();
 
-  let expandedPlanId = $state<string | null | undefined>(undefined);
   let purchaseMessage = $state<string | null>(null);
+  let promoInput = $state("");
+  let sheetMessage = $state<string | null>(null);
   let submittingPlanId = $state<string | null>(null);
+  let submittingPromo = $state(false);
   let termsAccepted = $state(false);
+  let handledPurchaseRequest = 0;
   const purchaseAttemptKeys = new SvelteMap<string, string>();
-  const featuredPlanId = $derived(
-    plans.find((plan) => plan.isFeatured)?.id ?? null,
-  );
-  const activeExpandedPlanId = $derived(
-    expandedPlanId === undefined ? featuredPlanId : expandedPlanId,
+  const subscription = $derived(profileOverview.subscription);
+  const isAuthenticated = $derived(user !== null);
+  const welcomeName = $derived(
+    user?.username
+      ? `@${user.username}`
+      : user
+        ? "Username не указан"
+        : "Инкогнито",
   );
   const promoPreviewByPlan = $derived(
     new Map(
@@ -53,8 +62,23 @@
     ),
   );
 
-  function togglePlan(planId: string): void {
-    expandedPlanId = activeExpandedPlanId === planId ? null : planId;
+  function formatDate(value: Date): string {
+    return new Intl.DateTimeFormat("ru-RU", {
+      day: "numeric",
+      month: "long",
+      timeZone: "UTC",
+      year: "numeric",
+    }).format(value);
+  }
+
+  function formatTrafficUsage(bytes: number | null): string {
+    if (bytes === null) {
+      return "Нет данных";
+    }
+
+    return `${new Intl.NumberFormat("ru-RU", {
+      maximumFractionDigits: 1,
+    }).format(bytes / 1024 ** 3)} ГБ`;
   }
 
   function getStoredPromoCode(): string {
@@ -65,8 +89,67 @@
     }
   }
 
+  function openPurchaseSheet(message: string | null = null): void {
+    sheetMessage = message;
+    showDialog("plans-dialog");
+  }
+
+  function closePurchaseSheet(): void {
+    closeDialog("plans-dialog");
+    sheetMessage = null;
+  }
+
+  function openPromoSheet(): void {
+    showDialog("promo-dialog");
+  }
+
+  function closePromoSheet(): void {
+    closeDialog("promo-dialog");
+  }
+
+  function handlePurchaseDialogClose(): void {
+    sheetMessage = null;
+  }
+
+  function getDialog(id: string): HTMLDialogElement | null {
+    const dialog = document.getElementById(id);
+
+    return dialog instanceof HTMLDialogElement ? dialog : null;
+  }
+
+  function showDialog(id: string): void {
+    const dialog = getDialog(id);
+
+    if (dialog && !dialog.open) {
+      dialog.showModal();
+    }
+  }
+
+  function closeDialog(id: string): void {
+    const dialog = getDialog(id);
+
+    if (dialog?.open) {
+      dialog.close();
+    }
+  }
+
+  function openSetup(): void {
+    if (subscription.status === "active") {
+      void goto(resolve("/setup"));
+      return;
+    }
+
+    openPurchaseSheet("Для настройки сначала выберите подходящий тариф.");
+  }
+
   function enhancePurchase(planId: string): SubmitFunction {
     return ({ cancel, formData }) => {
+      if (!isAuthenticated) {
+        cancel();
+        purchaseMessage = "Покупка доступна после входа через Telegram.";
+        return;
+      }
+
       if (!termsAccepted || submittingPlanId) {
         cancel();
         return;
@@ -117,256 +200,360 @@
                 : status === "cancelled"
                   ? "Оплата отменена."
                   : "Telegram не смог завершить оплату.";
-          void invalidateAll();
+          closePurchaseSheet();
         });
       };
     };
   }
+
+  const enhancePromo: SubmitFunction = () => {
+    submittingPromo = true;
+
+    return async ({ update }) => {
+      await update({ reset: false });
+      submittingPromo = false;
+    };
+  };
+
+  onMount(() => {
+    promoInput = getStoredPromoCode();
+  });
+
+  $effect(() => {
+    const promoCode =
+      feedback?.action === "promo" && feedback.ok
+        ? feedback.promoCode?.code
+        : undefined;
+
+    if (promoCode && typeof sessionStorage !== "undefined") {
+      try {
+        sessionStorage.setItem("astra_promo_code", promoCode);
+        promoInput = promoCode;
+      } catch {
+        promoInput = promoCode;
+      }
+    }
+  });
+
+  $effect(() => {
+    if (purchaseRequest > handledPurchaseRequest) {
+      handledPurchaseRequest = purchaseRequest;
+      openPurchaseSheet();
+    }
+  });
 </script>
 
-<header class="mb-5 flex items-center justify-between gap-4">
-  <div class="flex min-w-0 items-center gap-3">
-    <UserAvatar {user} />
-    <div class="min-w-0">
-      <p class="text-xs font-medium text-[color:var(--color-muted)]">
-        Добро пожаловать
-      </p>
-      <h1
-        id="section-heading-home"
-        class="truncate text-[21px] font-semibold"
-        tabindex="-1"
-      >
-        {user.firstName}
-      </h1>
-    </div>
-  </div>
-  <span
-    class="header-pill grid h-12 w-12 shrink-0 place-items-center rounded-[18px] text-[color:var(--color-accent)]"
-    aria-label="Защищённая сессия"
+<header class="mb-6">
+  <p class="text-sm text-[color:var(--color-muted)]">Добро пожаловать</p>
+  <h1
+    id="section-heading-home"
+    class="mt-1 truncate text-[30px] font-semibold tracking-[-0.03em]"
+    tabindex="-1"
   >
-    <AppIcon name="lock" size={22} />
-  </span>
+    {welcomeName}
+  </h1>
 </header>
 
-<article class="hero-grid surface mb-3 rounded-[28px] px-5 py-6 text-center">
-  <div class="mb-5 flex items-center justify-between gap-4 text-left">
-    <div>
-      <p
-        class="text-xs font-semibold tracking-[0.12em] text-[color:var(--color-accent)] uppercase"
-      >
-        Astra VPN
-      </p>
-      <h2 class="mt-1 text-[21px] leading-tight font-semibold">
-        Выберите свой тариф
-      </h2>
-    </div>
-    <span
-      class="inline-flex min-h-8 items-center gap-2 rounded-full bg-[color:color-mix(in_srgb,var(--color-accent)_10%,transparent)] px-3 text-[10px] font-semibold tracking-[0.05em] text-[color:var(--color-accent)]"
+<section aria-labelledby="benefits-heading" class="mb-6">
+  <h2 id="benefits-heading" class="sr-only">Преимущества сервиса</h2>
+  <div class="grid grid-cols-2 gap-2.5">
+    <article class="feature-card">
+      <span class="feature-icon"><AppIcon name="lock" size={20} /></span>
+      <h3>Без логов</h3>
+      <p>Личные данные не храним</p>
+    </article>
+    <article class="feature-card">
+      <span class="feature-icon"><AppIcon name="shield" size={20} /></span>
+      <h3>VLESS / Xray</h3>
+      <p>Современный протокол</p>
+    </article>
+    <article class="feature-card">
+      <span class="feature-icon"><AppIcon name="headset" size={20} /></span>
+      <h3>Поддержка 24/7</h3>
+      <p>Поможем с настройкой</p>
+    </article>
+    <article class="feature-card">
+      <span class="feature-icon"><AppIcon name="devices" size={20} /></span>
+      <h3>До 3 устройств</h3>
+      <p>Для личного пользования</p>
+    </article>
+  </div>
+</section>
+
+<section aria-labelledby="current-plan-heading">
+  <div class="mb-2.5 flex items-center justify-between">
+    <h2
+      id="current-plan-heading"
+      class="text-[11px] font-semibold tracking-[0.12em] text-[color:var(--color-muted)] uppercase"
     >
-      <span
-        class="h-2 w-2 rounded-full bg-[color:var(--color-accent)] shadow-[0_0_10px_color-mix(in_srgb,var(--color-accent)_70%,transparent)]"
-      ></span>
-      КАТАЛОГ ДОСТУПЕН
-    </span>
+      Текущий план
+    </h2>
+    {#if subscription.status === "active"}
+      <span class="status-pill status-active">Активен</span>
+    {:else if subscription.status === "provisioning" || subscription.status === "provisioning_failed"}
+      <span class="status-pill">Создаётся</span>
+    {:else}
+      <span class="status-pill">Отсутствует</span>
+    {/if}
   </div>
 
-  <span
-    class="connect-orb mx-auto grid h-[88px] w-[88px] place-items-center rounded-full"
-  >
-    <AppIcon name="shield" size={38} />
-  </span>
-  <p class="mt-5 text-[18px] font-semibold">Безлимитный трафик</p>
-  <p class="mt-1 text-sm text-[color:var(--color-muted)]">
-    До трёх личных устройств
-  </p>
-</article>
-
-<div class="mb-6 grid grid-cols-2 gap-2.5">
-  <button
-    class="surface min-h-24 rounded-[21px] px-3 py-4 text-left transition active:scale-[0.98]"
-    type="button"
-    onclick={() => onNavigate(0)}
-  >
-    <span
-      class="mb-3 grid h-10 w-10 place-items-center rounded-[14px] bg-[color:color-mix(in_srgb,var(--color-accent)_11%,transparent)] text-[color:var(--color-accent)]"
-    >
-      <AppIcon name="headset" size={21} />
-    </span>
-    <span class="block text-sm font-semibold">Поддержка</span>
-    <span class="mt-1 block text-xs text-[color:var(--color-muted)]">
-      Помощь и FAQ
-    </span>
-  </button>
-
-  <button
-    class="surface min-h-24 rounded-[21px] px-3 py-4 text-left transition active:scale-[0.98]"
-    type="button"
-    onclick={() => onNavigate(2)}
-  >
-    <span
-      class="mb-3 grid h-10 w-10 place-items-center rounded-[14px] bg-[color:color-mix(in_srgb,var(--color-accent)_11%,transparent)] text-[color:var(--color-accent)]"
-    >
-      <AppIcon name="profile" size={21} />
-    </span>
-    <span class="block text-sm font-semibold">Профиль</span>
-    <span class="mt-1 block text-xs text-[color:var(--color-muted)]">
-      Аккаунт и сессия
-    </span>
-  </button>
-</div>
-
-<div class="mb-3 flex items-center justify-between">
-  <h2 class="text-[21px] font-semibold">Тарифы</h2>
-  <span class="text-xs text-[color:var(--color-muted)]">до 3 устройств</span>
-</div>
-
-<label
-  class="surface mb-3 flex min-h-14 cursor-pointer items-start gap-3 rounded-[18px] px-4 py-3 text-sm leading-5"
->
-  <input
-    class="mt-0.5 h-5 w-5 shrink-0 accent-[color:var(--color-accent)]"
-    type="checkbox"
-    bind:checked={termsAccepted}
-    disabled={!purchasesEnabled}
-  />
-  <span>
-    <span class="block font-semibold">Подтверждаю условия покупки</span>
-    <span class="mt-0.5 block text-xs text-[color:var(--color-muted)]">
-      Одноразовый платёж Telegram Stars. Автопродления нет.
-    </span>
-  </span>
-</label>
-
-{#if feedback?.action === "purchase" || purchaseMessage}
-  <div
-    class:feedback-error={feedback?.action === "purchase" && !feedback.ok}
-    class:feedback-success={feedback?.action !== "purchase" || feedback.ok}
-    class="mb-3 rounded-[16px] px-4 py-3 text-sm"
-    role={feedback?.action === "purchase" && !feedback.ok ? "alert" : "status"}
-  >
-    {purchaseMessage ?? feedback?.message}
-  </div>
-{/if}
-
-{#if !purchasesEnabled}
-  <p class="mb-3 text-xs leading-5 text-[color:var(--color-muted)]">
-    Реальные платежи отключены до прохождения production gates.
-  </p>
-{/if}
-
-{#if plans.length === 0}
-  <article class="surface rounded-[24px] p-5">
-    <span
-      class="grid h-11 w-11 place-items-center rounded-[15px] bg-[color:var(--color-card-raised)] text-[color:var(--color-accent)]"
-    >
-      <AppIcon name="spark" size={23} />
-    </span>
-    <h3 class="mt-4 text-[17px] font-semibold">Нет доступных тарифов</h3>
-    <p class="mt-1 text-sm leading-6 text-[color:var(--color-muted)]">
-      Каталог временно пуст. Попробуйте обновить приложение позже.
-    </p>
-  </article>
-{:else}
-  <div class="space-y-2.5">
-    {#each plans as plan (plan.id)}
-      {@const preview = promoPreviewByPlan.get(plan.id)}
-      <article class:open={activeExpandedPlanId === plan.id} class="tariff">
-        <div
-          class="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 gap-y-[5px] px-3.5 pt-3.5 pb-[5px]"
-        >
-          <button
-            class="min-h-11 min-w-0 text-left"
-            type="button"
-            aria-expanded={activeExpandedPlanId === plan.id}
-            onclick={() => togglePlan(plan.id)}
-          >
-            <span class="block text-[19px] font-semibold">
-              {plan.name}
-            </span>
-            <span class="mt-0.5 block text-xs text-[color:var(--color-muted)]">
-              {plan.durationDays} дней
-            </span>
-          </button>
-          <span class="text-right whitespace-nowrap">
-            {#if preview}
-              <span
-                class="block text-xs text-[color:var(--color-muted)] line-through"
-              >
-                {plan.priceStars} ⭐
-              </span>
-              <span class="block text-[18px] font-semibold">
-                {preview.totalStars} ⭐
-              </span>
-            {:else}
-              <span class="block text-[18px] font-semibold">
-                {plan.priceStars} ⭐
-              </span>
-            {/if}
-          </span>
-          <form
-            method="POST"
-            action="?/createOrder"
-            use:enhance={enhancePurchase(plan.id)}
-          >
-            <input type="hidden" name="planId" value={plan.id} />
-            <input type="hidden" name="promoCode" value="" />
-            <input type="hidden" name="idempotencyKey" value="" />
-            <input
-              type="hidden"
-              name="termsAccepted"
-              value={termsAccepted ? "true" : "false"}
-            />
-            <button
-              class="min-h-11 min-w-[92px] rounded-[14px] bg-[color:var(--color-text)] px-4 py-3 text-sm font-semibold text-[color:var(--color-app)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-45"
-              type="submit"
-              disabled={!purchasesEnabled ||
-                !termsAccepted ||
-                submittingPlanId !== null}
-            >
-              {submittingPlanId === plan.id ? "Счёт…" : "Купить"}
-            </button>
-          </form>
-          <button
-            class="col-span-3 flex min-h-11 items-center justify-center text-[color:var(--color-muted)]"
-            type="button"
-            aria-label={activeExpandedPlanId === plan.id
-              ? `Скрыть описание тарифа ${plan.name}`
-              : `Показать описание тарифа ${plan.name}`}
-            aria-expanded={activeExpandedPlanId === plan.id}
-            onclick={() => togglePlan(plan.id)}
-          >
-            <span class="tariff-chevron">
-              <AppIcon name="arrow" size={20} />
-            </span>
-          </button>
+  <article class="current-plan surface mb-4 rounded-[26px] p-4" data-no-swipe>
+    {#if subscription.status === "active"}
+      <h3 class="truncate text-[22px] font-semibold">
+        {subscription.planName}
+      </h3>
+      <dl class="plan-details">
+        <div>
+          <dt>Действует до</dt>
+          <dd>{formatDate(subscription.expiresAt)}</dd>
         </div>
-        <div class="tariff-details">
-          <div class="overflow-hidden">
-            <div
-              class="space-y-2 border-t border-[color:var(--color-border)] px-4 py-3 text-sm leading-6 text-[color:var(--color-muted)]"
-            >
+        <div>
+          <dt>Использовано</dt>
+          <dd>{formatTrafficUsage(subscription.usedTrafficBytes)}</dd>
+        </div>
+      </dl>
+    {:else if subscription.status === "provisioning" || subscription.status === "provisioning_failed"}
+      <h3 class="truncate text-[22px] font-semibold">
+        {subscription.planName}
+      </h3>
+      <p class="mt-1 text-sm leading-6 text-[color:var(--color-muted)]">
+        Оплата получена. Доступ появится после завершения настройки сервера.
+      </p>
+    {:else}
+      <h3 class="text-[22px] font-semibold">Подписки нет</h3>
+      <p class="mt-1 text-sm leading-6 text-[color:var(--color-muted)]">
+        Выберите тариф, чтобы получить доступ к защищённому соединению.
+      </p>
+    {/if}
+
+    <div class="mt-5 grid grid-cols-3 gap-2">
+      <button
+        class="plan-action plan-action-primary"
+        type="button"
+        onclick={() => openPurchaseSheet()}
+      >
+        Купить
+      </button>
+      <button class="plan-action" type="button" onclick={openSetup}>
+        Настроить
+      </button>
+      <button class="plan-action" type="button" onclick={openPromoSheet}>
+        Промокод
+      </button>
+    </div>
+  </article>
+
+  {#if feedback?.action === "purchase" || purchaseMessage}
+    <div
+      class:feedback-error={feedback?.action === "purchase" && !feedback.ok}
+      class:feedback-success={feedback?.action !== "purchase" || feedback.ok}
+      class="mb-4 rounded-[16px] px-4 py-3 text-sm"
+      role={feedback?.action === "purchase" && !feedback.ok
+        ? "alert"
+        : "status"}
+    >
+      {purchaseMessage ?? feedback?.message}
+    </div>
+  {/if}
+</section>
+
+<dialog
+  id="plans-dialog"
+  class="bottom-sheet"
+  aria-labelledby="plans-sheet-heading"
+  onclose={handlePurchaseDialogClose}
+>
+  <div class="bottom-sheet-handle" aria-hidden="true"></div>
+  <div class="mb-4 flex items-start justify-between gap-3">
+    <div>
+      <h2 id="plans-sheet-heading" class="text-[22px] font-semibold">Тарифы</h2>
+      <p class="mt-1 text-sm text-[color:var(--color-muted)]">
+        Выберите срок доступа
+      </p>
+    </div>
+    <button
+      class="sheet-close"
+      type="button"
+      aria-label="Закрыть выбор тарифа"
+      onclick={closePurchaseSheet}
+    >
+      ×
+    </button>
+  </div>
+
+  {#if sheetMessage}
+    <p
+      class="mb-3 rounded-[14px] bg-[color:color-mix(in_srgb,var(--color-accent)_11%,transparent)] px-3 py-2.5 text-sm text-[color:var(--color-accent)]"
+    >
+      {sheetMessage}
+    </p>
+  {/if}
+
+  {#if !isAuthenticated}
+    <p
+      class="mb-3 rounded-[14px] bg-[color:var(--color-card-raised)] px-3 py-2.5 text-sm leading-5 text-[color:var(--color-muted)]"
+    >
+      Для покупки откройте приложение из Telegram.
+    </p>
+  {/if}
+
+  {#if !purchasesEnabled}
+    <p class="mb-3 text-xs leading-5 text-[color:var(--color-muted)]">
+      Реальные платежи отключены до прохождения production gates.
+    </p>
+  {/if}
+
+  <label class="terms-control mb-3">
+    <input
+      type="checkbox"
+      bind:checked={termsAccepted}
+      disabled={!purchasesEnabled || !isAuthenticated}
+    />
+    <span>Подтверждаю условия покупки и разовый платёж в Telegram Stars.</span>
+  </label>
+
+  {#if plans.length === 0}
+    <article class="surface rounded-[20px] p-4">
+      <p class="font-semibold">Нет доступных тарифов</p>
+      <p class="mt-1 text-sm text-[color:var(--color-muted)]">
+        Попробуйте обновить приложение позже.
+      </p>
+    </article>
+  {:else}
+    <div class="space-y-2.5">
+      {#each plans as plan (plan.id)}
+        {@const preview = promoPreviewByPlan.get(plan.id)}
+        <article class:featured={plan.isFeatured} class="tariff tariff-compact">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <h3 class="truncate text-[17px] font-semibold">
+                {plan.name}
+              </h3>
               {#if plan.isFeatured}
-                <span
-                  class="inline-flex rounded-full bg-[color:color-mix(in_srgb,var(--color-accent)_12%,transparent)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--color-accent)]"
-                >
-                  Рекомендуем
-                </span>
-              {/if}
-              <p>{plan.description ?? "Безлимитный VPN-доступ"}</p>
-              <ul class="list-inside list-disc">
-                <li>Безлимитный трафик</li>
-                <li>До 3 личных устройств</li>
-                <li>Современное шифрование VLESS</li>
-              </ul>
-              {#if preview}
-                <p class="text-xs text-[color:var(--color-accent)]">
-                  Скидка {preview.discountStars} Stars применится на сервере.
-                </p>
+                <span class="featured-mark">Рекомендуем</span>
               {/if}
             </div>
+            <p class="mt-0.5 truncate text-xs text-[color:var(--color-muted)]">
+              {plan.durationDays} дней · {plan.description ??
+                "Безлимитный трафик"}
+            </p>
           </div>
-        </div>
-      </article>
-    {/each}
+          <div class="flex items-center gap-3">
+            <span class="text-right whitespace-nowrap">
+              {#if preview}
+                <span
+                  class="block text-[11px] text-[color:var(--color-muted)] line-through"
+                >
+                  {plan.priceStars} ⭐
+                </span>
+                <span class="block text-[17px] font-semibold"
+                  >{preview.totalStars} ⭐</span
+                >
+              {:else}
+                <span class="block text-[17px] font-semibold"
+                  >{plan.priceStars} ⭐</span
+                >
+              {/if}
+            </span>
+            <form
+              method="POST"
+              action="?/createOrder"
+              use:enhance={enhancePurchase(plan.id)}
+            >
+              <input type="hidden" name="planId" value={plan.id} />
+              <input type="hidden" name="promoCode" value="" />
+              <input type="hidden" name="idempotencyKey" value="" />
+              <input
+                type="hidden"
+                name="termsAccepted"
+                value={termsAccepted ? "true" : "false"}
+              />
+              <button
+                class="buy-button"
+                type="submit"
+                disabled={!purchasesEnabled ||
+                  !termsAccepted ||
+                  submittingPlanId !== null}
+              >
+                {submittingPlanId === plan.id ? "Счёт…" : "Купить"}
+              </button>
+            </form>
+          </div>
+        </article>
+      {/each}
+    </div>
+  {/if}
+</dialog>
+
+<dialog
+  id="promo-dialog"
+  class="bottom-sheet bottom-sheet-small"
+  aria-labelledby="promo-sheet-heading"
+>
+  <div class="bottom-sheet-handle" aria-hidden="true"></div>
+  <div class="mb-4 flex items-start justify-between gap-3">
+    <div>
+      <h2 id="promo-sheet-heading" class="text-[22px] font-semibold">
+        Промокод
+      </h2>
+      <p class="mt-1 text-sm text-[color:var(--color-muted)]">
+        Скидка будет повторно проверена при оплате.
+      </p>
+    </div>
+    <button
+      class="sheet-close"
+      type="button"
+      aria-label="Закрыть промокод"
+      onclick={closePromoSheet}
+    >
+      ×
+    </button>
   </div>
-{/if}
+
+  {#if isAuthenticated}
+    <form
+      method="POST"
+      action="?/applyPromo"
+      class="flex gap-2"
+      use:enhance={enhancePromo}
+    >
+      <label class="sr-only" for="promo-code">Промокод</label>
+      <input
+        id="promo-code"
+        name="code"
+        bind:value={promoInput}
+        required
+        minlength="3"
+        maxlength="32"
+        autocomplete="off"
+        placeholder="Введите код"
+        class="form-control min-w-0 flex-1 uppercase"
+        disabled={submittingPromo}
+      />
+      <button
+        class="buy-button min-w-[104px]"
+        type="submit"
+        disabled={submittingPromo}
+      >
+        {submittingPromo ? "Проверяем…" : "Применить"}
+      </button>
+    </form>
+  {:else}
+    <p
+      class="rounded-[14px] bg-[color:var(--color-card-raised)] px-3 py-3 text-sm leading-5 text-[color:var(--color-muted)]"
+    >
+      Войти и применить промокод можно только внутри Telegram.
+    </p>
+  {/if}
+
+  {#if feedback?.action === "promo"}
+    <div
+      class:feedback-error={!feedback.ok}
+      class:feedback-success={feedback.ok}
+      class="mt-3 rounded-[16px] px-4 py-3 text-sm"
+      role={feedback.ok ? "status" : "alert"}
+    >
+      {feedback.message}
+    </div>
+  {/if}
+</dialog>

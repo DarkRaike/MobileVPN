@@ -7,10 +7,13 @@
 
   let {
     developmentMockAuthEnabled,
+    overlay = false,
   }: {
     developmentMockAuthEnabled: boolean;
+    overlay?: boolean;
   } = $props();
 
+  let initialized = $state(false);
   let status = $state<"authenticating" | "error" | "outside">("authenticating");
   let message = $state("Подтверждаем данные Telegram…");
 
@@ -62,51 +65,76 @@
   }
 
   onMount(() => {
+    initialized = true;
     void authenticate();
   });
 </script>
 
-<main class="auth-shell">
-  <section class="surface w-full max-w-[390px] rounded-[30px] p-6 text-center">
-    <span
-      class="mx-auto grid h-[82px] w-[82px] place-items-center rounded-[26px] border border-[color:var(--color-border)] bg-[color:var(--color-card-raised)] text-[color:var(--color-accent)] shadow-[0_20px_50px_rgb(0_0_0/20%)]"
+{#if !overlay}
+  <main class="auth-shell">
+    <section
+      class="surface w-full max-w-[390px] rounded-[30px] p-6 text-center"
     >
-      <AppIcon name="shield" size={38} />
-    </span>
-
-    <p
-      class="mt-6 text-xs font-semibold tracking-[0.16em] text-[color:var(--color-accent)] uppercase"
-    >
-      Astra VPN
-    </p>
-    <h1 class="mt-2 text-[26px] leading-tight font-semibold tracking-[-0.03em]">
-      Безопасный вход
-    </h1>
-    <p
-      class="mx-auto mt-3 max-w-[290px] text-sm leading-6 text-[color:var(--color-muted)]"
-    >
-      {message}
-    </p>
-
-    {#if status === "authenticating"}
       <span
-        class="mx-auto mt-6 block h-7 w-7 animate-spin rounded-full border-2 border-[color:var(--color-border)] border-t-[color:var(--color-accent)]"
-        aria-label="Авторизация"
-      ></span>
-    {:else}
-      <button
-        class="mt-6 min-h-11 w-full rounded-[16px] bg-[color:var(--color-accent)] px-4 py-3 text-sm font-semibold text-[color:var(--color-button-text)] transition active:scale-[0.985]"
-        type="button"
-        onclick={() => void authenticate()}
+        class="mx-auto grid h-[82px] w-[82px] place-items-center rounded-[26px] border border-[color:var(--color-border)] bg-[color:var(--color-card-raised)] text-[color:var(--color-accent)] shadow-[0_20px_50px_rgb(0_0_0/20%)]"
       >
-        {status === "outside" ? "Проверить снова" : "Повторить вход"}
-      </button>
-    {/if}
+        <AppIcon name="shield" size={38} />
+      </span>
 
-    {#if developmentMockAuthEnabled}
-      <p class="mt-4 text-xs text-[color:var(--color-muted)]">
-        Development mock включён локально
+      <h1
+        class="mt-2 text-[26px] leading-tight font-semibold tracking-[-0.03em]"
+      >
+        Безопасный вход
+      </h1>
+      <p
+        class="mx-auto mt-3 max-w-[290px] text-sm leading-6 text-[color:var(--color-muted)]"
+      >
+        {message}
       </p>
-    {/if}
-  </section>
-</main>
+
+      {#if status === "authenticating"}
+        <span
+          class="mx-auto mt-6 block h-7 w-7 animate-spin rounded-full border-2 border-[color:var(--color-border)] border-t-[color:var(--color-accent)]"
+          aria-label="Авторизация"
+        ></span>
+      {:else}
+        <button
+          class="mt-6 min-h-11 w-full rounded-[16px] bg-[color:var(--color-accent)] px-4 py-3 text-sm font-semibold text-[color:var(--color-button-text)] transition active:scale-[0.985]"
+          type="button"
+          onclick={() => void authenticate()}
+        >
+          {status === "outside" ? "Проверить снова" : "Повторить вход"}
+        </button>
+      {/if}
+
+      {#if developmentMockAuthEnabled}
+        <p class="mt-4 text-xs text-[color:var(--color-muted)]">
+          Development mock включён локально
+        </p>
+      {/if}
+    </section>
+  </main>
+{:else if initialized && status !== "outside"}
+  <aside class="auth-overlay" aria-live="polite">
+    <section class="surface auth-overlay-card rounded-[24px] p-5 text-center">
+      {#if status === "authenticating"}
+        <span
+          class="mx-auto block h-7 w-7 animate-spin rounded-full border-2 border-[color:var(--color-border)] border-t-[color:var(--color-accent)]"
+          aria-label="Авторизация"
+        ></span>
+        <p class="mt-4 text-sm text-[color:var(--color-muted)]">{message}</p>
+      {:else}
+        <p class="text-sm leading-6 text-[color:var(--color-muted)]">
+          {message}
+        </p>
+        <button
+          class="mt-4 min-h-11 w-full rounded-[16px] bg-[color:var(--color-accent)] px-4 py-3 text-sm font-semibold text-[color:var(--color-button-text)]"
+          type="button"
+          onclick={() => void authenticate()}
+        >
+          Повторить вход
+        </button>
+      {/if}
+    </section>
+  </aside>
+{/if}

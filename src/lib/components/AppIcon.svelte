@@ -4,6 +4,8 @@
     | "check"
     | "clock"
     | "copy"
+    | "devices"
+    | "download"
     | "headset"
     | "home"
     | "lock"
@@ -42,6 +44,14 @@
   {:else if name === "copy"}
     <rect x="8" y="8" width="11" height="11" rx="2"></rect>
     <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
+  {:else if name === "devices"}
+    <rect x="3" y="5" width="13" height="10" rx="2"></rect>
+    <path d="M8 19h11a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1"></path>
+    <path d="M8 15v3"></path>
+  {:else if name === "download"}
+    <path d="M12 3v11"></path>
+    <path d="m8 10 4 4 4-4"></path>
+    <path d="M5 20h14"></path>
   {:else if name === "headset" || name === "support"}
     <path d="M4 13v-2a8 8 0 0 1 16 0v2"></path>
     <path d="M6 17H5a2 2 0 0 1-2-2v-1a2 2 0 0 1 2-2h1v5Z"></path>

@@ -12,26 +12,29 @@
 </script>
 
 <svelte:head>
-  <title>Astra VPN</title>
+  <title>VPN</title>
   <meta
     name="description"
-    content="Telegram Mini App для управления подпиской Astra VPN"
+    content="Telegram Mini App для управления VPN-подпиской"
   />
 </svelte:head>
 
 <ThemeBridge />
 
-{#if data.user}
-  <AppShell
-    activePlans={data.activePlans}
-    faqItems={data.faqItems}
-    {feedback}
-    isAdmin={data.isAdmin}
-    profileOverview={data.profileOverview}
-    purchasesEnabled={data.purchasesEnabled}
-    sessionExpiresAt={data.sessionExpiresAt}
-    user={data.user}
+<AppShell
+  activePlans={data.activePlans}
+  faqItems={data.faqItems}
+  {feedback}
+  isAdmin={data.isAdmin}
+  profileOverview={data.profileOverview}
+  purchasesEnabled={data.purchasesEnabled}
+  sessionExpiresAt={data.sessionExpiresAt}
+  user={data.user}
+/>
+
+{#if !data.user}
+  <AuthGate
+    developmentMockAuthEnabled={data.developmentMockAuthEnabled}
+    overlay
   />
-{:else}
-  <AuthGate developmentMockAuthEnabled={data.developmentMockAuthEnabled} />
 {/if}

@@ -4,6 +4,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import type { Database } from "../../db/client";
 import { orders, subscriptions } from "../../db/schema";
 import { decryptSubscriptionUrl } from "../../security/subscription-url";
+import type { Marzban } from "../../integrations/marzban/marzban";
 import { logEvent } from "../../observability/logger";
 import { listPurchaseHistory } from "../orders/orders";
 
@@ -14,6 +15,7 @@ export interface ActiveSubscriptionView {
   startsAt: Date;
   status: "active";
   subscriptionUrl: string;
+  usedTrafficBytes: number | null;
 }
 
 export interface PendingSubscriptionView {
@@ -52,6 +54,7 @@ export async function getProfileOverview(
   userId: string,
   encryptionKey: string | undefined,
   now = new Date(),
+  marzban?: Marzban,
 ) {
   const [
     history,
@@ -108,6 +111,7 @@ export async function getProfileOverview(
         encryptionKey,
       );
       let qrCodeDataUrl: string | null = null;
+      let usedTrafficBytes: number | null = null;
 
       try {
         qrCodeDataUrl = createQrCodeDataUrl(subscriptionUrl);
@@ -120,13 +124,31 @@ export async function getProfileOverview(
         });
       }
 
+      if (marzban) {
+        try {
+          const marzbanUser = await marzban.getUser(
+            subscription.marzbanUsername,
+          );
+
+          usedTrafficBytes = marzbanUser?.usedTrafficBytes ?? null;
+        } catch (error) {
+          logEvent("warn", {
+            errorCode: "SUBSCRIPTION_TRAFFIC_FETCH_FAILED",
+            errorType: error instanceof Error ? error.name : "UnknownError",
+            subscriptionId: subscription.id,
+            timestamp: now.toISOString(),
+          });
+        }
+      }
+
       subscriptionView = {
         expiresAt: subscription.expiresAt,
-        planName: activeOrderRecords[0]?.planName ?? "Astra VPN",
+        planName: activeOrderRecords[0]?.planName ?? "VPN-доступ",
         qrCodeDataUrl,
         startsAt: subscription.startsAt,
         status: "active",
         subscriptionUrl,
+        usedTrafficBytes,
       };
     } catch (error) {
       logEvent("error", {

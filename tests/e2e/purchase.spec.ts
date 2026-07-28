@@ -198,6 +198,44 @@ async function runReconciliation(request: APIRequestContext): Promise<number> {
   return response.status();
 }
 
+test("shows the anonymous dashboard outside Telegram", async ({ page }) => {
+  await page.goto("/");
+
+  await expect(
+    page.getByText("Добро пожаловать", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Инкогнито" })).toBeVisible();
+  await expect(page.locator(".mini-app")).toHaveAttribute(
+    "data-hydrated",
+    "true",
+  );
+
+  await page.getByRole("button", { exact: true, name: "Настроить" }).click();
+  const plansDialog = page.getByRole("dialog", { name: "Тарифы" });
+  await expect(plansDialog).toBeVisible();
+  await expect(
+    plansDialog.getByText("Для настройки сначала выберите подходящий тариф."),
+  ).toBeVisible();
+  await plansDialog.getByLabel("Закрыть выбор тарифа").click();
+
+  const profileNavigation = page.getByRole("link", {
+    exact: true,
+    name: "Профиль",
+  });
+  await profileNavigation.click();
+  await expect(profileNavigation).toHaveAttribute("aria-current", "page");
+  const profileSection = page.getByRole("region", { name: "Профиль" });
+  await expect(
+    profileSection.getByText("Инкогнито", { exact: true }).first(),
+  ).toBeVisible();
+  await expect(
+    profileSection.getByText("Не активна", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    profileSection.getByText("Действует до —", { exact: true }),
+  ).toBeVisible();
+});
+
 test("completes signed auth, discounted payment and idempotent provisioning", async ({
   page,
   request,
@@ -216,17 +254,31 @@ test("completes signed auth, discounted payment and idempotent provisioning", as
   );
   expect(initialResponse?.headers()["x-content-type-options"]).toBe("nosniff");
   await expect(
-    page.getByRole("heading", { name: "Выберите свой тариф" }),
+    page.getByText("Добро пожаловать", { exact: true }),
   ).toBeVisible();
+  await expect(page.locator(".mini-app")).toHaveAttribute(
+    "data-hydrated",
+    "true",
+  );
+  const promoButton = page.getByRole("button", {
+    exact: true,
+    name: "Промокод",
+  });
+  await promoButton.click();
+  const promoDialog = page.getByRole("dialog", { name: "Промокод" });
+  await expect(promoDialog).toBeVisible();
+  await promoDialog.locator("#promo-code").fill("E2E20");
+  await promoDialog.getByRole("button", { name: "Применить" }).click();
+  await expect(
+    promoDialog.getByText("Промокод применён: скидка 20%."),
+  ).toBeVisible();
+  await promoDialog.getByLabel("Закрыть промокод").click();
 
-  await page.getByRole("button", { exact: true, name: "Профиль" }).click();
-  await page.getByLabel("Промокод").fill("E2E20");
-  await page.getByRole("button", { name: "Применить" }).click();
-  await expect(page.getByText("Промокод применён: скидка 20%.")).toBeVisible();
-
-  await page.getByRole("button", { exact: true, name: "Главная" }).click();
-  await page.getByLabel("Подтверждаю условия покупки").check();
-  const comfortPlan = page.locator("article.tariff").filter({
+  await page.getByRole("button", { exact: true, name: "Купить" }).click();
+  const plansDialog = page.getByRole("dialog", { name: "Тарифы" });
+  await expect(plansDialog).toBeVisible();
+  await plansDialog.locator('input[type="checkbox"]').check();
+  const comfortPlan = plansDialog.locator("article.tariff").filter({
     has: page.getByText("Комфорт", { exact: true }),
   });
 
@@ -256,11 +308,18 @@ test("completes signed auth, discounted payment and idempotent provisioning", as
   expect(await runReconciliation(request)).toBe(200);
 
   await page.reload();
-  await page.getByRole("button", { exact: true, name: "Профиль" }).click();
-  await expect(page.getByText("Активна", { exact: true })).toBeVisible();
+  const profileNavigation = page.getByRole("link", {
+    exact: true,
+    name: "Профиль",
+  });
+  await profileNavigation.click();
+  await expect(profileNavigation).toHaveAttribute("aria-current", "page");
+  const profileSection = page.getByRole("region", { name: "Профиль" });
   await expect(
-    page.getByAltText("QR-код ссылки подключения Astra VPN"),
+    profileSection.getByText("Активна", { exact: true }),
   ).toBeVisible();
+  await profileSection.getByRole("link", { name: "Настроить" }).click();
+  await expect(page.getByAltText("QR-код ссылки подключения")).toBeVisible();
   await expect(
     page.getByText(/https:\/\/sub\.example\.test\/sub\/e2e-/u),
   ).toBeVisible();
@@ -301,11 +360,18 @@ test("rejects an outdated Telegram client before creating an invoice", async ({
   );
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Выберите свой тариф" }),
+    page.getByText("Добро пожаловать", { exact: true }),
   ).toBeVisible();
+  await expect(page.locator(".mini-app")).toHaveAttribute(
+    "data-hydrated",
+    "true",
+  );
 
-  await page.getByLabel("Подтверждаю условия покупки").check();
-  const starterPlan = page.locator("article.tariff").filter({
+  await page.getByRole("button", { exact: true, name: "Купить" }).click();
+  const plansDialog = page.getByRole("dialog", { name: "Тарифы" });
+  await expect(plansDialog).toBeVisible();
+  await plansDialog.locator('input[type="checkbox"]').check();
+  const starterPlan = plansDialog.locator("article.tariff").filter({
     has: page.getByText("Старт", { exact: true }),
   });
   await starterPlan.getByRole("button", { name: "Купить" }).click();
@@ -330,11 +396,18 @@ test("keeps a confirmed payment retryable when Marzban is unavailable", async ({
   );
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Выберите свой тариф" }),
+    page.getByText("Добро пожаловать", { exact: true }),
   ).toBeVisible();
+  await expect(page.locator(".mini-app")).toHaveAttribute(
+    "data-hydrated",
+    "true",
+  );
 
-  await page.getByLabel("Подтверждаю условия покупки").check();
-  const starterPlan = page.locator("article.tariff").filter({
+  await page.getByRole("button", { exact: true, name: "Купить" }).click();
+  const plansDialog = page.getByRole("dialog", { name: "Тарифы" });
+  await expect(plansDialog).toBeVisible();
+  await plansDialog.locator('input[type="checkbox"]').check();
+  const starterPlan = plansDialog.locator("article.tariff").filter({
     has: page.getByText("Старт", { exact: true }),
   });
   await starterPlan.getByRole("button", { name: "Купить" }).click();
@@ -362,9 +435,11 @@ test("keeps a confirmed payment retryable when Marzban is unavailable", async ({
 
   await page.goto("/?section=profile");
   await expect(
-    page.getByRole("heading", {
-      name: "Оплата получена, доступ создаётся",
-    }),
+    page.getByRole("heading", { name: "Доступ создаётся" }),
   ).toBeVisible();
-  await expect(page.getByText(/Marzban временно недоступен/u)).toBeVisible();
+  await expect(
+    page.getByText(
+      "Временно не удалось создать доступ. Повторим автоматически.",
+    ),
+  ).toBeVisible();
 });

@@ -24,7 +24,7 @@ describe("TelegramStarsAdapter", () => {
       description: "VPN access for 30 days",
       label: "Comfort",
       paymentAttemptId: "22222222-2222-4222-8222-222222222222",
-      title: "Astra VPN",
+      title: "VPN",
     });
 
     expect(invoiceUrl).toBe("https://t.me/$fixture-invoice");
@@ -37,7 +37,7 @@ describe("TelegramStarsAdapter", () => {
       payload: "v1:22222222-2222-4222-8222-222222222222",
       prices: [{ amount: 249, label: "Comfort" }],
       provider_token: "",
-      title: "Astra VPN",
+      title: "VPN",
     });
   });
 
