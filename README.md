@@ -20,35 +20,43 @@ Telegram Mini App для покупки и управления VPN-доступ
    npm ci
    ```
 
-2. Создайте локальный файл окружения:
+2. Запустите development server:
+
+   ```powershell
+   npm run dev
+   ```
+
+Приложение будет доступно по адресу `http://localhost:5173`. Команда
+автоматически применяет миграции и идемпотентно создаёт начальные тарифы.
+
+Если локальная конфигурация отсутствует, только для текущего development
+процесса генерируется случайный `SESSION_SECRET` и включается mock-аутентификация.
+`.env` при этом не создаётся. Production-конфигурация и live-операции этим
+сценарием не затрагиваются.
+
+Для запуска внутри Telegram создайте явную локальную конфигурацию:
+
+1. Скопируйте пример:
 
    ```powershell
    Copy-Item .env.example .env
    ```
 
-3. Сгенерируйте `SESSION_SECRET` и сохраните результат в `.env`:
+2. Сгенерируйте `SESSION_SECRET` и сохраните результат в `.env`:
 
    ```powershell
    node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
    ```
 
-4. Выберите режим авторизации:
-
-   - для запуска внутри Telegram задайте `TELEGRAM_BOT_TOKEN` и оставьте
-     `ENABLE_DEV_MOCK_AUTH=false`;
-   - только для локальной браузерной разработки задайте
-     `ENABLE_DEV_MOCK_AUTH=true`.
-
-5. Примените миграции, создайте начальные тарифы и запустите приложение:
+3. Задайте `TELEGRAM_BOT_TOKEN` и оставьте
+   `ENABLE_DEV_MOCK_AUTH=false`.
 
    ```powershell
-   npm run db:migrate
-   npm run db:seed
    npm run dev
    ```
 
-Приложение будет доступно по адресу `http://localhost:5173`. Локальная база
-создаётся в `data/` и не отслеживается Git.
+Явное `ENABLE_DEV_MOCK_AUTH=false` без `TELEGRAM_BOT_TOKEN` считается ошибкой
+конфигурации. Локальная база создаётся в `data/` и не отслеживается Git.
 
 ## Docker development environment
 
