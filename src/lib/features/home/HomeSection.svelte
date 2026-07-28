@@ -258,23 +258,31 @@
   <h2 id="benefits-heading" class="sr-only">Преимущества сервиса</h2>
   <div class="grid grid-cols-2 gap-2.5">
     <article class="feature-card">
-      <span class="feature-icon"><AppIcon name="lock" size={20} /></span>
-      <h3>Без логов</h3>
+      <div class="feature-card-heading">
+        <span class="feature-icon"><AppIcon name="lock" size={19} /></span>
+        <h3>Без логов</h3>
+      </div>
       <p>Личные данные не храним</p>
     </article>
     <article class="feature-card">
-      <span class="feature-icon"><AppIcon name="shield" size={20} /></span>
-      <h3>VLESS / Xray</h3>
+      <div class="feature-card-heading">
+        <span class="feature-icon"><AppIcon name="shield" size={19} /></span>
+        <h3>VLESS / Xray</h3>
+      </div>
       <p>Современный протокол</p>
     </article>
     <article class="feature-card">
-      <span class="feature-icon"><AppIcon name="headset" size={20} /></span>
-      <h3>Поддержка 24/7</h3>
+      <div class="feature-card-heading">
+        <span class="feature-icon"><AppIcon name="headset" size={19} /></span>
+        <h3>Поддержка 24/7</h3>
+      </div>
       <p>Поможем с настройкой</p>
     </article>
     <article class="feature-card">
-      <span class="feature-icon"><AppIcon name="devices" size={20} /></span>
-      <h3>До 3 устройств</h3>
+      <div class="feature-card-heading">
+        <span class="feature-icon"><AppIcon name="devices" size={19} /></span>
+        <h3>До 3 устройств</h3>
+      </div>
       <p>Для личного пользования</p>
     </article>
   </div>
