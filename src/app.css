@@ -24,8 +24,7 @@
   --glass: rgb(255 255 255 / 30%);
   --glass-edge: rgb(255 255 255 / 65%);
   --glass-shadow:
-    0 24px 55px -12px rgb(74 101 163 / 5%),
-    inset 0 1px 0 rgb(255 255 255 / 65%);
+    0 24px 55px -12px rgb(74 101 163 / 5%), inset 0 1px 0 rgb(255 255 255 / 65%);
   --glass-solid: #f3f6fd;
   --divider: rgb(27 35 51 / 7%);
   --plan-divider: rgb(96 120 172 / 14%);
@@ -250,21 +249,25 @@ button {
   transition: all 200ms ease; /* Изменено для плавной анимации всех свойств */
 
   /* Эффект стекла */
-  background: rgba(74, 108, 186, 0.9); /* Снижена плотность, чтобы лучше читался blur */
+  background: rgba(
+    74,
+    108,
+    186,
+    0.9
+  ); /* Снижена плотность, чтобы лучше читался blur */
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  
+
   /* Тонкая стеклянная граница */
-  border: 1px solid rgba(255, 255, 255, 0.25); 
-  
+  border: 1px solid rgba(255, 255, 255, 0.25);
+
   /* Объемная тень: внешняя + внутренний блик (inset) */
-  box-shadow: 
-    0 8px 32px rgba(74, 108, 186, 0.2), 
+  box-shadow:
+    0 8px 32px rgba(74, 108, 186, 0.2),
     inset 0 1px 1px rgba(255, 255, 255, 0.3);
 }
 
 .lg-btn-accent {
-
   display: inline-flex;
   min-height: 50px;
   align-items: center;
@@ -278,16 +281,21 @@ button {
   transition: all 200ms ease; /* Изменено для плавной анимации всех свойств */
 
   /* Эффект стекла */
-  background: rgba(74, 108, 186, 0.9); /* Снижена плотность, чтобы лучше читался blur */
+  background: rgba(
+    74,
+    108,
+    186,
+    0.9
+  ); /* Снижена плотность, чтобы лучше читался blur */
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  
+
   /* Тонкая стеклянная граница */
-  border: 1px solid rgba(255, 255, 255, 0.25); 
-  
+  border: 1px solid rgba(255, 255, 255, 0.25);
+
   /* Объемная тень: внешняя + внутренний блик (inset) */
-  box-shadow: 
-    0 8px 32px rgba(74, 108, 186, 0.2), 
+  box-shadow:
+    0 8px 32px rgba(74, 108, 186, 0.2),
     inset 0 1px 1px rgba(255, 255, 255, 0.3);
 }
 
