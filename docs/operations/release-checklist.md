@@ -19,7 +19,8 @@ Release запрещён, пока хотя бы один gate в
 - [ ] Host firewall публикует только 80/443/8443; SSH ограничен operator IP.
 - [ ] DNS/HTTPS, webhook secret, REALITY target/SAN/time sync проверены.
 - [ ] Secret files имеют `0600`, не находятся в Git/image/command history.
-- [ ] App и operations images зафиксированы immutable digest.
+- [ ] App и operations images собраны CI и загружены на VPS под тегом
+      `RELEASE_VERSION`; их digest записан в release evidence.
 - [ ] Migration проверена на clean DB и предыдущей схеме; downgrade strategy
       записана.
 - [ ] Последний offsite backup моложе 60 минут и repository check успешен.
@@ -38,12 +39,15 @@ Release запрещён, пока хотя бы один gate в
    ```
 
 3. Выполнить разовый backup из `backup-restore.md`.
-4. Получить образы по digest и запустить без build:
+4. Загрузить собранные CI образы под тегами
+   `astra-vpn-app:${RELEASE_VERSION}` и
+   `astra-vpn-operations:${RELEASE_VERSION}`, получить внешние образы по digest
+   и запустить без build:
 
    ```bash
    docker compose \
      --env-file deployment/production.env \
-     -f deployment/compose.production.yaml pull
+     -f deployment/compose.production.yaml pull --ignore-buildable
    docker compose \
      --env-file deployment/production.env \
      -f deployment/compose.production.yaml up -d --no-build

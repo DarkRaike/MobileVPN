@@ -187,5 +187,19 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-Production Compose, backup/restore, monitoring, Telegram smoke и release/
-rollback процедуры находятся в [docs/operations](docs/operations).
+## Развёртывание на VPS
+
+Marzban, Xray с REALITY и приложение поднимаются одним Compose stack. После
+заполнения `deployment/production.env` достаточно одной команды:
+
+```bash
+docker compose --env-file deployment/production.env -f deployment/compose.production.yaml up -d --build
+```
+
+Секреты, ключи REALITY, Xray config, администратор Marzban, миграции и seed
+тарифов создаются автоматически one-shot сервисами. Полная процедура, анализ
+конфигурации и список ручных шагов —
+[docs/operations/vps-deployment.md](docs/operations/vps-deployment.md).
+
+Backup/restore, monitoring, Telegram smoke и release/rollback процедуры
+находятся в [docs/operations](docs/operations).

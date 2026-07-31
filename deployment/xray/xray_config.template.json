@@ -1,0 +1,55 @@
+{
+  "log": {
+    "access": "none",
+    "error": "",
+    "loglevel": "warning"
+  },
+  "inbounds": [
+    {
+      "tag": "VLESS_TCP_REALITY_V1",
+      "listen": "0.0.0.0",
+      "port": 8443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "dest": "PLACEHOLDER:443",
+          "xver": 0,
+          "serverNames": ["PLACEHOLDER"],
+          "privateKey": "PLACEHOLDER",
+          "shortIds": ["PLACEHOLDER"]
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"]
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "DIRECT",
+      "protocol": "freedom"
+    },
+    {
+      "tag": "BLOCK",
+      "protocol": "blackhole"
+    }
+  ],
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": ["VLESS_TCP_REALITY_V1"],
+        "ip": ["geoip:private"],
+        "outboundTag": "BLOCK"
+      }
+    ]
+  }
+}

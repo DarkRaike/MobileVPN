@@ -35,6 +35,7 @@ Stage 4 implementation artifacts:
 - monitoring: `docs/operations/monitoring.md`;
 - Telegram smoke template: `docs/operations/telegram-client-smoke.md`;
 - release/rollback: `docs/operations/release-checklist.md`;
+- развёртывание на VPS: `docs/operations/vps-deployment.md`;
 - локальный automation drill:
   `docs/evidence/local-backup-restore-drill-2026-07-28.json`.
 

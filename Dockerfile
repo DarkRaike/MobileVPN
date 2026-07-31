@@ -15,6 +15,14 @@ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 FROM dependencies AS build
 COPY . .
 RUN npm run build
+# The production image has no TypeScript toolchain, so the catalog seed is
+# bundled here and keeps sharing the plan definitions with the application.
+RUN npx esbuild scripts/seed.ts \
+  --bundle \
+  --platform=node \
+  --format=esm \
+  --packages=external \
+  --outfile=production-scripts/seed.mjs
 
 FROM node:24.12.0-alpine AS production
 ENV NODE_ENV=production
@@ -23,8 +31,10 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 COPY --from=build /app/build ./build
 COPY --from=build /app/drizzle ./drizzle
+COPY --from=build /app/production-scripts/seed.mjs ./scripts/seed.mjs
 COPY --from=build /app/scripts/monitoring-worker.mjs ./scripts/monitoring-worker.mjs
 COPY --from=build /app/scripts/reconciliation-worker.mjs ./scripts/reconciliation-worker.mjs
+COPY --from=build /app/scripts/telegram-setup.mjs ./scripts/telegram-setup.mjs
 RUN mkdir -p /data && chown -R node:node /app /data
 USER node
 EXPOSE 3000
