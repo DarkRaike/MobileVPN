@@ -42,7 +42,8 @@ try {
   if (!response.ok || payload?.ok !== true) {
     console.error(
       JSON.stringify({
-        description: typeof payload?.description === "string" ? payload.description : null,
+        description:
+          typeof payload?.description === "string" ? payload.description : null,
         errorCode: "TELEGRAM_SET_WEBHOOK_FAILED",
         level: "error",
         status: response.status,

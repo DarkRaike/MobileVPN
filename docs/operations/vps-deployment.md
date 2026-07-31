@@ -1,0 +1,186 @@
+# Развёртывание приложения и Marzban на одном VPS
+
+Документ описывает, как один Docker Compose stack поднимает Marzban, Xray с
+REALITY и Telegram Mini App на одном сервере, и что остаётся ручной операцией.
+
+## 1. Анализ предыдущей конфигурации
+
+`deployment/compose.production.yaml` описывал целевую архитектуру, но не мог
+быть запущен без большой ручной подготовки. Конкретные пробелы:
+
+| Пробел                                                                                                                                                                                                                           | Последствие                                                                                             |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Обязательные `APP_IMAGE`, `OPERATIONS_IMAGE`, `APP_ENV_FILE`, `WORKER_ENV_FILE`, `MONITORING_ENV_FILE`, `MARZBAN_ENV_FILE`, `BACKUP_ENV_FILE`, `XRAY_CONFIG_FILE`, `RESTIC_PASSWORD_FILE_PATH`, `DEPLOY_SECRET_BUNDLE_DIRECTORY` | `docker compose up` завершался ошибкой: ни один из файлов не существовал в репозитории                  |
+| Не было шаблона Xray config и генерации X25519/shortId                                                                                                                                                                           | REALITY inbound `VLESS_TCP_REALITY_V1` не существовал, VPN не выдавался                                 |
+| Marzban admin не создавался                                                                                                                                                                                                      | `POST /api/admin/token` возвращал ошибку, provisioning падал на первом же заказе                        |
+| `XRAY_SUBSCRIPTION_URL_PREFIX` оставался пустым                                                                                                                                                                                  | Marzban возвращал `subscription_url` без host, QR и ссылка были нерабочими                              |
+| `app` и `monitoring` находились только в сети `backend` с `internal: true`                                                                                                                                                       | исходящие вызовы `api.telegram.org` невозможны: invoice, pre-checkout, поддержка и alerting не работали |
+| Production image не содержал seed тарифов                                                                                                                                                                                        | на чистой базе «Главная» оставалась пустой                                                              |
+| `backup` входил в набор по умолчанию и требовал restic repository                                                                                                                                                                | без настроенного offsite storage сервис уходил в restart loop                                           |
+| Telegram webhook нигде не регистрировался                                                                                                                                                                                        | `message.successful_payment` не доходил до приложения                                                   |
+
+Правильными и сохранёнными остались: pinned images по digest, `read_only`
+контейнеры, `cap_drop: ALL`, `no-new-privileges`, разделение volumes приложения
+и Marzban, закрытие `/api/*` и `/dashboard/*` на subscription host и отключённый
+на нём access log.
+
+## 2. Что делает один stack
+
+| Сервис             | Роль                                                                        |
+| ------------------ | --------------------------------------------------------------------------- |
+| `bootstrap`        | one-shot: генерирует секреты, REALITY-ключи, `xray_config.json` и env-файлы |
+| `marzban-init`     | one-shot: `alembic upgrade head` и `marzban-cli admin import-from-env -y`   |
+| `app-init`         | one-shot: Drizzle migrations и идемпотентный seed тарифов 7/30/90           |
+| `marzban`          | панель Marzban на внутреннем `8000` и Xray REALITY на `8443/tcp`            |
+| `app`              | SvelteKit Node server на внутреннем `3000`                                  |
+| `worker`           | reconciliation и provisioning retry                                         |
+| `monitoring`       | внутренние сигналы и Telegram alerting                                      |
+| `reverse-proxy`    | Caddy, HTTPS и маршрутизация трёх host role                                 |
+| `backup`           | profile `backup`: ежечасный restic snapshot                                 |
+| `telegram-webhook` | profile `telegram`: разовый `setWebhook`                                    |
+
+Порядок запуска задан через `depends_on` с
+`condition: service_completed_successfully`, поэтому одна команда доводит стек
+до рабочего состояния без промежуточных ручных шагов.
+
+Секреты генерируются после разбора Compose-файла, поэтому сервисы не могут
+получить их через `env_file`. Вместо этого `deployment/bootstrap/with-env.sh`
+загружает нужный файл на старте контейнера и запускает реальную команду.
+
+## 3. Запуск на VPS
+
+1. Установить Docker Engine с Compose plugin и открыть в firewall только
+   `80/tcp`, `443/tcp`, `443/udp`, `8443/tcp` и SSH по operator IP allowlist.
+2. Склонировать репозиторий и подготовить конфигурацию:
+
+   ```bash
+   cp deployment/production.env.example deployment/production.env
+   ```
+
+3. Заполнить `BASE_DOMAIN`, `ACME_EMAIL`, `TELEGRAM_BOT_TOKEN` и
+   `TELEGRAM_ADMIN_USER_ID`. Остальные значения имеют рабочие значения по
+   умолчанию.
+4. Поднять весь стек одной командой:
+
+   ```bash
+   docker compose --env-file deployment/production.env -f deployment/compose.production.yaml up -d --build
+   ```
+
+5. Проверить состояние:
+
+   ```bash
+   docker compose --env-file deployment/production.env -f deployment/compose.production.yaml ps
+   ```
+
+Повторный запуск той же команды безопасен: существующие секреты, ключи REALITY,
+база Marzban и база приложения сохраняются.
+
+Если образы собираются в CI, их достаточно загрузить на VPS под тегами
+`astra-vpn-app:${RELEASE_VERSION}` и `astra-vpn-operations:${RELEASE_VERSION}` и
+запускать стек с `--no-build`.
+
+## 4. Что генерируется автоматически
+
+`bootstrap` создаёт файлы в `DEPLOY_SECRET_DIRECTORY` (по умолчанию
+`deployment/secrets`, каталог `0711`, вне Git и вне build context):
+
+| Файл                     | Содержимое                                                                                                                                      |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generated-secrets.json` | постоянное хранилище сгенерированных значений                                                                                                   |
+| `app.env`                | `SESSION_SECRET`, `SUBSCRIPTION_URL_ENCRYPTION_KEY`, `INTERNAL_JOB_SECRET`, `MONITORING_SECRET`, `TELEGRAM_WEBHOOK_SECRET`, Marzban credentials |
+| `worker.env`             | секреты reconciliation worker                                                                                                                   |
+| `monitoring.env`         | секреты и параметры alerting                                                                                                                    |
+| `marzban.env`            | `SUDO_USERNAME`, `SUDO_PASSWORD`, `XRAY_JSON`, `XRAY_SUBSCRIPTION_URL_PREFIX`                                                                   |
+| `xray_config.json`       | inbound `VLESS_TCP_REALITY_V1` с приватным ключом и short ID                                                                                    |
+| `reality-client.json`    | публичные параметры подключения: public key, short ID, SNI, порт                                                                                |
+| `restic_password`        | пароль restic repository                                                                                                                        |
+
+Значения создаются один раз и переживают перезапуски. Файлы приложения
+принадлежат `APP_UID:APP_GID` с режимом `0400`, остальные — `root` с `0600`.
+
+Каталог секретов необходимо скопировать в защищённое хранилище вне VPS. Потеря
+`SUBSCRIPTION_URL_ENCRYPTION_KEY` делает сохранённые Subscription URL
+нечитаемыми, а потеря приватного ключа REALITY требует перевыпуска всех
+клиентских конфигураций.
+
+Ротация выполняется удалением конкретного ключа из `generated-secrets.json` и
+повторным запуском стека.
+
+## 5. Домен-заглушка
+
+`BASE_DOMAIN=example.com` в примере — заглушка. До покупки домена:
+
+- стек поднимается полностью, приложение и Marzban работают по внутренней сети;
+- Caddy не сможет выпустить сертификаты, поэтому публичный HTTPS недоступен;
+- для проверок можно указать `ACME_CA` на staging Let's Encrypt, чтобы не
+  расходовать production rate limits.
+
+После покупки домена нужно создать записи `app`, `sub` и `vpn` на IP VPS,
+заменить `BASE_DOMAIN` и перезапустить стек. `BASE_DOMAIN` участвует в проверке
+конфигурации приложения: домены `.example`, `.test` и `localhost` отклоняются.
+
+## 6. Marzban
+
+Учётная запись администратора создаётся автоматически из `SUDO_USERNAME` и
+`SUDO_PASSWORD`; пароль находится в `deployment/secrets/generated-secrets.json`.
+Команда `admin import-from-env -y` идемпотентна и синхронизирует пароль при
+каждом запуске стека.
+
+Порт `8000` не публикуется. Для доступа к панели используется временный
+override и SSH tunnel:
+
+```bash
+docker compose --env-file deployment/production.env -f deployment/compose.production.yaml -f deployment/compose.admin-tunnel.yaml up -d marzban
+```
+
+```bash
+ssh -N -L 8000:127.0.0.1:8000 operator@vps
+```
+
+После работы override нужно убрать и пересоздать сервис без него.
+
+Xray config подключается read-only, поэтому изменения ядра из панели не
+сохраняются: конфигурация меняется только через
+`deployment/xray/xray_config.template.json` и переменные стека.
+
+## 7. Telegram webhook
+
+Регистрация webhook — отдельная явная операция, потому что она меняет настройки
+бота на стороне Telegram:
+
+```bash
+docker compose --env-file deployment/production.env -f deployment/compose.production.yaml --profile telegram run --rm telegram-webhook
+```
+
+Команда вызывает `setWebhook` для `https://app.<domain>/api/telegram/webhook` с
+`secret_token` из `app.env` и `allowed_updates` `message` и `pre_checkout_query`.
+Она требует уже выпущенного сертификата, поэтому выполняется после настройки
+реального домена.
+
+## 8. Backup
+
+Ежечасный restic backup выключен по умолчанию, чтобы стек поднимался без
+внешнего storage. Порядок включения:
+
+1. Заполнить `deployment/backup.env` по `deployment/backup.env.example`.
+2. Скопировать `deployment/secrets/restic_password` в хранилище вне VPS.
+3. Установить `COMPOSE_PROFILES=backup` в `deployment/production.env`.
+4. Перезапустить стек и выполнить процедуры из
+   [backup-restore.md](backup-restore.md).
+
+До включения backup production launch запрещён: gates `offsite_backup` и
+`restore_drill` остаются открытыми.
+
+## 9. Что остаётся ручным
+
+`ENABLE_LIVE_OPERATIONS=false` — состояние по умолчанию. Приложение и Marzban
+работают, но реальные платежи и выдача реального VPN-доступа выключены.
+Включение требует закрытия всех gates из
+[production-readiness.md](production-readiness.md), включая измеренный REALITY
+target, offsite backup, restore drill и ревью тимлида. При
+`ENABLE_LIVE_OPERATIONS=true` без закрытых gates приложение осознанно не
+стартует.
+
+Отдельно остаются ручными: покупка домена и DNS, измерение REALITY target через
+`xray tls ping` с production VPS, синхронизация времени на сервере, firewall и
+SSH allowlist, SBOM/CVE review образа Marzban и bundled Xray.
