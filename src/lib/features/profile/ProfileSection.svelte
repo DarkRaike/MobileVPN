@@ -26,14 +26,15 @@
   const isAuthenticated = $derived(user !== null);
   const fullName = $derived(
     user
-      ? [user.firstName, user.lastName].filter(Boolean).join(" ")
+      ? [user.firstName, user.lastName].filter(Boolean).join(" ") ||
+          "Пользователь"
       : "Инкогнито",
   );
   const username = $derived(user?.username ? `@${user.username}` : "Инкогнито");
   const sessionExpiry = $derived(
     sessionExpiresAt
       ? new Intl.DateTimeFormat("ru-RU", {
-          dateStyle: "medium",
+          dateStyle: "short",
           timeStyle: "short",
           timeZone: "UTC",
         }).format(sessionExpiresAt)
@@ -76,65 +77,59 @@
   }
 </script>
 
-<header class="mb-6">
-  <h1
-    id="section-heading-profile"
-    class="text-[30px] font-semibold tracking-[-0.03em]"
-    tabindex="-1"
-  >
-    Профиль
-  </h1>
+<header class="mb-5">
+  <h1 id="section-heading-profile" class="lg-h1" tabindex="-1">Профиль</h1>
 </header>
 
-<article class="profile-card surface mb-6 rounded-[26px] p-4">
-  <div class="flex items-center gap-3.5">
-    <UserAvatar {user} size="large" />
-    <div class="min-w-0 flex-1">
-      <h2 class="truncate text-[19px] font-semibold">{fullName}</h2>
-      <p class="mt-0.5 truncate text-sm text-[color:var(--color-muted)]">
-        {username}
-      </p>
-    </div>
-    {#if isAdmin}
-      <a
-        class="grid min-h-11 min-w-11 place-items-center rounded-[15px] bg-[color:var(--color-card-raised)] text-[color:var(--color-accent)]"
-        href={resolve("/admin")}
-        aria-label="Открыть административный раздел"
-      >
-        <AppIcon name="lock" size={21} />
-      </a>
-    {/if}
+<article class="surface flex items-center gap-3.5 p-[18px]">
+  <UserAvatar {user} size="large" />
+  <div class="min-w-0 flex-1">
+    <h2 class="m-0 truncate text-[19px] font-medium">{fullName}</h2>
+    <p class="mt-[3px] mb-0 truncate text-[13.5px] text-[color:var(--muted)]">
+      {username}
+    </p>
   </div>
+  {#if isAdmin}
+    <a
+      class="lg-btn-glass h-11 min-h-11 w-11 shrink-0 rounded-full p-0"
+      href={resolve("/admin")}
+      aria-label="Открыть административный раздел"
+    >
+      <AppIcon name="lock" size={20} />
+    </a>
+  {/if}
 </article>
 
-<p
-  class="mb-2.5 text-[11px] font-semibold tracking-[0.12em] text-[color:var(--color-muted)] uppercase"
->
-  Подписка
-</p>
-<article class="surface mb-6 rounded-[26px] p-4">
+<h2 class="lg-eyebrow mx-0.5 mt-5 mb-2.5">Подписка</h2>
+<article class="surface p-[18px]">
   <div class="flex items-start justify-between gap-3">
     <div class="min-w-0">
       {#if subscription.status === "active"}
-        <h2 class="truncate text-[20px] font-semibold">
+        <h3 class="m-0 truncate text-[20px] font-medium tracking-[-0.02em]">
           {subscription.planName}
-        </h2>
-        <p class="mt-1 text-sm text-[color:var(--color-muted)]">
+        </h3>
+        <p class="mt-1.5 mb-0 text-[13px] text-[color:var(--muted)]">
           Активна до {formatDate(subscription.expiresAt)}
         </p>
       {:else if subscription.status === "provisioning"}
-        <h2 class="text-[20px] font-semibold">Доступ создаётся</h2>
-        <p class="mt-1 text-sm leading-5 text-[color:var(--color-muted)]">
-          Оплата получена. Мы завершаем выдачу подписки.
+        <h3 class="m-0 text-[20px] font-medium tracking-[-0.02em]">
+          Доступ создаётся
+        </h3>
+        <p class="mt-1.5 mb-0 text-[13px] leading-5 text-[color:var(--muted)]">
+          Оплата получена, завершаем выдачу
         </p>
       {:else if subscription.status === "provisioning_failed"}
-        <h2 class="text-[20px] font-semibold">Доступ создаётся</h2>
-        <p class="mt-1 text-sm leading-5 text-[color:var(--color-muted)]">
+        <h3 class="m-0 text-[20px] font-medium tracking-[-0.02em]">
+          Доступ создаётся
+        </h3>
+        <p class="mt-1.5 mb-0 text-[13px] leading-5 text-[color:var(--muted)]">
           Временно не удалось создать доступ. Повторим автоматически.
         </p>
       {:else}
-        <h2 class="text-[20px] font-semibold">Не активна</h2>
-        <p class="mt-1 text-sm text-[color:var(--color-muted)]">
+        <h3 class="m-0 text-[20px] font-medium tracking-[-0.02em]">
+          Не активна
+        </h3>
+        <p class="mt-1.5 mb-0 text-[13px] text-[color:var(--muted)]">
           Действует до —
         </p>
       {/if}
@@ -143,24 +138,23 @@
       class:status-active={subscription.status === "active"}
       class="status-pill"
     >
-      {subscription.status === "active" ? "Активна" : "Нет плана"}
+      {subscription.status === "active"
+        ? "Активна"
+        : subscription.status === "provisioning" ||
+            subscription.status === "provisioning_failed"
+          ? "Создаётся"
+          : "Нет плана"}
     </span>
   </div>
 
-  <div class="mt-4 grid grid-cols-2 gap-2">
-    <button
-      class="plan-action plan-action-primary"
-      type="button"
-      onclick={onPurchase}
-    >
+  <div class="mt-4 grid grid-cols-2 gap-[9px]">
+    <button class="lg-btn-accent" type="button" onclick={onPurchase}>
       Продлить
     </button>
     {#if subscription.status === "active"}
-      <a class="plan-action grid place-items-center" href={resolve("/setup")}>
-        Настроить
-      </a>
+      <a class="lg-btn-glass" href={resolve("/setup")}>Настроить</a>
     {:else}
-      <button class="plan-action" type="button" onclick={onPurchase}>
+      <button class="lg-btn-glass" type="button" onclick={onPurchase}>
         Выбрать тариф
       </button>
     {/if}
@@ -168,55 +162,41 @@
 </article>
 
 {#if isAuthenticated}
-  <div class="mb-2.5 flex items-center justify-between">
-    <h2
-      class="text-[11px] font-semibold tracking-[0.12em] text-[color:var(--color-muted)] uppercase"
-    >
-      История покупок
-    </h2>
-    <span class="text-xs text-[color:var(--color-muted)]">
-      {purchaseHistory.length}
-    </span>
-  </div>
+  <h2 class="lg-eyebrow mx-0.5 mt-5 mb-2.5">История покупок</h2>
 
   {#if purchaseHistory.length === 0}
-    <article class="surface mb-6 rounded-[24px] p-5">
-      <p class="text-sm font-semibold">Покупок пока нет</p>
-      <p class="mt-1 text-xs leading-5 text-[color:var(--color-muted)]">
+    <article class="lg-list px-4 py-[13px]">
+      <p class="m-0 text-sm font-medium">Покупок пока нет</p>
+      <p class="mt-1 mb-0 text-[11.5px] leading-5 text-[color:var(--muted)]">
         Здесь появятся статусы оплаты и выдачи доступа.
       </p>
     </article>
   {:else}
-    <div class="surface mb-6 rounded-[27px] p-4">
-      {#each purchaseHistory as purchase, index (purchase.id)}
-        <article
-          class:border-b={index < purchaseHistory.length - 1}
-          class="flex items-start gap-3 border-[color:var(--color-border)] py-3 first:pt-0 last:pb-0"
-        >
+    <div class="lg-list px-4 py-1.5">
+      {#each purchaseHistory as purchase (purchase.id)}
+        <article class="history-row">
           <span
-            class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[color:color-mix(in_srgb,var(--color-accent)_10%,transparent)] text-[color:var(--color-accent)]"
+            class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:color-mix(in_srgb,var(--accent)_22%,transparent)] text-[color:var(--accent-deep)]"
           >
-            <AppIcon name="spark" size={20} />
+            <AppIcon name="spark" size={18} />
           </span>
           <div class="min-w-0 flex-1">
-            <p class="truncate font-semibold">{purchase.planName}</p>
-            <p class="mt-0.5 text-xs text-[color:var(--color-muted)]">
-              {formatDate(purchase.createdAt)}
-            </p>
-            <p class="mt-1 text-[11px] text-[color:var(--color-muted)]">
-              {paymentStatusLabel(purchase.paymentStatus)} ·
-              {provisioningStatusLabel(purchase.provisioningStatus)}
+            <p class="m-0 truncate text-sm font-medium">{purchase.planName}</p>
+            <p class="mt-[3px] mb-0 text-[11.5px] text-[color:var(--muted)]">
+              {formatDate(purchase.createdAt)} · {paymentStatusLabel(
+                purchase.paymentStatus,
+              )} · {provisioningStatusLabel(purchase.provisioningStatus)}
             </p>
           </div>
           <div class="shrink-0 text-right">
-            <p class="font-semibold">{purchase.totalStars} ⭐</p>
+            <p class="m-0 text-sm font-medium whitespace-nowrap">
+              {purchase.totalStars} ⭐
+            </p>
             {#if purchase.discountStars > 0}
-              <p class="mt-0.5 text-[11px] text-[color:var(--color-accent)]">
+              <p
+                class="mt-[3px] mb-0 text-[11px] text-[color:var(--accent-deep)]"
+              >
                 −{purchase.discountStars} ⭐
-              </p>
-            {:else}
-              <p class="mt-0.5 text-[11px] text-[color:var(--color-muted)]">
-                {purchase.currency}
               </p>
             {/if}
           </div>
@@ -225,44 +205,32 @@
     </div>
   {/if}
 
-  <p
-    class="mb-2.5 text-[11px] font-semibold tracking-[0.12em] text-[color:var(--color-muted)] uppercase"
-  >
-    Сессия
-  </p>
-  <article class="surface mb-6 rounded-[24px] p-4">
-    <div class="flex items-center gap-3">
-      <span
-        class="grid h-11 w-11 shrink-0 place-items-center rounded-[15px] bg-[color:var(--color-card-raised)] text-[color:var(--color-accent)]"
-      >
-        <AppIcon name="lock" size={21} />
-      </span>
-      <div class="min-w-0 flex-1">
-        <p class="font-semibold">Telegram подтверждён</p>
-        <p class="mt-0.5 truncate text-xs text-[color:var(--color-muted)]">
-          {sessionExpiry ? `До ${sessionExpiry} UTC` : "Защищённая сессия"}
-        </p>
-      </div>
-      <span class="h-2.5 w-2.5 rounded-full bg-[color:var(--color-accent)]"
-      ></span>
+  <div class="session-row mt-5">
+    <span class="lg-icon-badge h-10 w-10">
+      <AppIcon name="lock" size={18} />
+    </span>
+    <div class="min-w-0 flex-1">
+      <p class="m-0 text-[13.5px] font-medium">Telegram подтверждён</p>
+      <p class="mt-[3px] mb-0 truncate text-[11.5px] text-[color:var(--muted)]">
+        {sessionExpiry ? `До ${sessionExpiry} UTC` : "Сессия защищена"}
+      </p>
     </div>
-  </article>
+    <span class="h-[9px] w-[9px] shrink-0 rounded-full bg-[color:var(--accent)]"
+    ></span>
+  </div>
 
   {#if isAdmin}
     <a
-      class="mb-3 flex min-h-12 w-full items-center justify-between rounded-[16px] bg-[color:var(--color-accent)] px-4 py-3 text-sm font-semibold text-[color:var(--color-button-text)]"
+      class="lg-btn-accent mt-5 flex w-full items-center justify-between px-5"
       href={resolve("/admin")}
     >
       Административный раздел
-      <AppIcon name="arrow" size={20} />
+      <AppIcon name="arrow" size={19} />
     </a>
   {/if}
 
-  <form method="POST" action="?/logout">
-    <button
-      class="min-h-11 w-full rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] px-4 py-3 text-sm font-semibold transition active:scale-[0.985]"
-      type="submit"
-    >
+  <form class="mt-5" method="POST" action="?/logout">
+    <button class="lg-btn-glass w-full" type="submit">
       Выйти из аккаунта
     </button>
   </form>

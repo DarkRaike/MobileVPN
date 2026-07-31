@@ -60,7 +60,7 @@
     `translate3d(calc(${-activeIndex * 100}% + ${dragOffset}px), 0, 0)`,
   );
   const indicatorTransform = $derived(
-    `translate3d(${activeIndex * 100}%, 0, 0)`,
+    `translate3d(${activeIndex * 54}px, 0, 0)`,
   );
 
   function updateUrl(index: SectionIndex, replace: boolean): void {
@@ -294,6 +294,7 @@
     >
       <HomeSection
         {feedback}
+        onOpenProfile={() => goTo(2, { history: "push" })}
         plans={activePlans}
         {profileOverview}
         {purchaseRequest}
@@ -325,28 +326,27 @@
       style:transform={indicatorTransform}
       aria-hidden="true"
     ></span>
-    <div class="relative grid grid-cols-3">
-      {#each sections as section, index (section.id)}
-        <a
-          class:active={activeIndex === index}
-          class="nav-item"
-          href={section.id === "home"
-            ? resolve("/")
-            : resolve(`/?section=${section.id}`)}
-          aria-current={activeIndex === index ? "page" : undefined}
-          onclick={(event) => navigateToSection(event, index)}
-        >
-          <AppIcon
-            name={section.id === "home"
-              ? "home"
-              : section.id === "profile"
-                ? "profile"
-                : "support"}
-            size={24}
-          />
-          <span>{section.label}</span>
-        </a>
-      {/each}
-    </div>
+    {#each sections as section, index (section.id)}
+      <a
+        class:active={activeIndex === index}
+        class="nav-item"
+        href={section.id === "home"
+          ? resolve("/")
+          : resolve(`/?section=${section.id}`)}
+        aria-label={section.label}
+        title={section.label}
+        aria-current={activeIndex === index ? "page" : undefined}
+        onclick={(event) => navigateToSection(event, index)}
+      >
+        <AppIcon
+          name={section.id === "home"
+            ? "home"
+            : section.id === "profile"
+              ? "profile"
+              : "support"}
+          size={23}
+        />
+      </a>
+    {/each}
   </nav>
 </main>

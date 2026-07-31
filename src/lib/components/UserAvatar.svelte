@@ -1,4 +1,6 @@
 <script lang="ts">
+  import AppIcon from "$lib/components/AppIcon.svelte";
+
   interface AvatarUser {
     firstName: string;
     lastName: string | null;
@@ -13,22 +15,18 @@
     user: AvatarUser | null;
   } = $props();
 
-  const initials = $derived(
-    [user?.firstName, user?.lastName]
-      .filter((part): part is string => Boolean(part))
-      .slice(0, 2)
-      .map((part) => part.trim().charAt(0).toLocaleUpperCase("ru"))
-      .join(""),
+  const initial = $derived(
+    user?.firstName
+      ? user.firstName.trim().charAt(0).toLocaleUpperCase("ru")
+      : "",
   );
 </script>
 
 <span
   class={[
-    "relative grid shrink-0 place-items-center overflow-hidden rounded-full font-bold",
-    user
-      ? "bg-gradient-to-br from-[#34708b] to-[#152d38] text-white shadow-[inset_0_1px_0_rgb(255_255_255/12%)]"
-      : "border border-[color:var(--color-border)] bg-[color:var(--color-card-raised)] text-transparent",
-    size === "large" ? "h-16 w-16 text-base" : "h-12 w-12 text-sm",
+    "profile-avatar relative grid shrink-0 place-items-center overflow-hidden rounded-full",
+    "border border-[color:var(--glass-edge)] bg-[color:var(--row-bg)] font-semibold text-[color:var(--faint)]",
+    size === "large" ? "h-16 w-16 text-xl" : "h-12 w-12 text-base",
   ]}
   aria-hidden="true"
 >
@@ -39,7 +37,9 @@
       alt=""
       referrerpolicy="no-referrer"
     />
-  {:else if user}
-    {initials || "A"}
+  {:else if initial}
+    <span class="avatar-initial">{initial}</span>
+  {:else}
+    <AppIcon name="profile" size={size === "large" ? 30 : 22} />
   {/if}
 </span>

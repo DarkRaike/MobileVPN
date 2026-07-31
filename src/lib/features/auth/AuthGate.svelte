@@ -75,31 +75,27 @@
     <section
       class="surface w-full max-w-[390px] rounded-[30px] p-6 text-center"
     >
-      <span
-        class="mx-auto grid h-[82px] w-[82px] place-items-center rounded-[26px] border border-[color:var(--color-border)] bg-[color:var(--color-card-raised)] text-[color:var(--color-accent)] shadow-[0_20px_50px_rgb(0_0_0/20%)]"
-      >
+      <span class="lg-icon-badge mx-auto h-[82px] w-[82px] rounded-[26px]">
         <AppIcon name="shield" size={38} />
       </span>
 
-      <h1
-        class="mt-2 text-[26px] leading-tight font-semibold tracking-[-0.03em]"
-      >
+      <h1 class="mt-4 text-[26px] leading-tight font-medium tracking-[-0.03em]">
         Безопасный вход
       </h1>
       <p
-        class="mx-auto mt-3 max-w-[290px] text-sm leading-6 text-[color:var(--color-muted)]"
+        class="mx-auto mt-3 max-w-[290px] text-sm leading-6 text-[color:var(--muted)]"
       >
         {message}
       </p>
 
       {#if status === "authenticating"}
         <span
-          class="mx-auto mt-6 block h-7 w-7 animate-spin rounded-full border-2 border-[color:var(--color-border)] border-t-[color:var(--color-accent)]"
+          class="mx-auto mt-6 block h-7 w-7 animate-spin rounded-full border-2 border-[color:var(--glass-edge)] border-t-[color:var(--accent-deep)]"
           aria-label="Авторизация"
         ></span>
       {:else}
         <button
-          class="mt-6 min-h-11 w-full rounded-[16px] bg-[color:var(--color-accent)] px-4 py-3 text-sm font-semibold text-[color:var(--color-button-text)] transition active:scale-[0.985]"
+          class="lg-btn-primary mt-6 w-full text-sm"
           type="button"
           onclick={() => void authenticate()}
         >
@@ -108,7 +104,7 @@
       {/if}
 
       {#if developmentMockAuthEnabled}
-        <p class="mt-4 text-xs text-[color:var(--color-muted)]">
+        <p class="mt-4 text-xs text-[color:var(--muted)]">
           Development mock включён локально
         </p>
       {/if}
@@ -119,16 +115,16 @@
     <section class="surface auth-overlay-card rounded-[24px] p-5 text-center">
       {#if status === "authenticating"}
         <span
-          class="mx-auto block h-7 w-7 animate-spin rounded-full border-2 border-[color:var(--color-border)] border-t-[color:var(--color-accent)]"
+          class="mx-auto block h-7 w-7 animate-spin rounded-full border-2 border-[color:var(--glass-edge)] border-t-[color:var(--accent-deep)]"
           aria-label="Авторизация"
         ></span>
-        <p class="mt-4 text-sm text-[color:var(--color-muted)]">{message}</p>
+        <p class="mt-4 text-sm text-[color:var(--muted)]">{message}</p>
       {:else}
-        <p class="text-sm leading-6 text-[color:var(--color-muted)]">
+        <p class="text-sm leading-6 text-[color:var(--muted)]">
           {message}
         </p>
         <button
-          class="mt-4 min-h-11 w-full rounded-[16px] bg-[color:var(--color-accent)] px-4 py-3 text-sm font-semibold text-[color:var(--color-button-text)]"
+          class="lg-btn-primary mt-4 w-full text-sm"
           type="button"
           onclick={() => void authenticate()}
         >

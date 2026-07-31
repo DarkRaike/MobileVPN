@@ -3,6 +3,7 @@
 
   import AppIcon from "$lib/components/AppIcon.svelte";
   import AuthGate from "$lib/features/auth/AuthGate.svelte";
+  import ThemeBridge from "$lib/telegram/ThemeBridge.svelte";
 
   import type { PageProps } from "./$types";
 
@@ -17,7 +18,7 @@
 
     try {
       await navigator.clipboard.writeText(subscription.subscriptionUrl);
-      copyMessage = "Ссылка скопирована";
+      copyMessage = "Ссылка подписки скопирована";
     } catch {
       copyMessage = "Не удалось скопировать ссылку";
     }
@@ -28,59 +29,89 @@
   <title>Настройка VPN</title>
 </svelte:head>
 
+<ThemeBridge />
+
 {#if !data.user}
   <AuthGate developmentMockAuthEnabled={data.developmentMockAuthEnabled} />
 {:else}
   <main class="setup-page">
     <header class="setup-header">
-      <a
-        class="grid h-11 w-11 place-items-center rounded-[15px] bg-[color:var(--color-card)] text-[color:var(--color-text)]"
-        href={resolve("/")}
-        aria-label="Вернуться на главную"
-      >
-        <span class="rotate-180"><AppIcon name="arrow" size={21} /></span>
+      <a class="lg-btn-glass setup-back" href={resolve("/")} aria-label="Назад">
+        <span class="rotate-180"><AppIcon name="arrow" size={20} /></span>
       </a>
       <div>
-        <p class="text-sm text-[color:var(--color-muted)]">Подключение</p>
-        <h1 class="text-[24px] font-semibold">Настроить VPN</h1>
+        <p class="m-0 text-[12.5px] text-[color:var(--muted)]">Подключение</p>
+        <h1 class="mt-[3px] mb-0 text-2xl font-medium tracking-[-0.02em]">
+          Настроить VPN
+        </h1>
       </div>
     </header>
 
     {#if subscription.status === "active"}
-      <section class="surface rounded-[28px] p-5">
-        <span class="setup-icon"><AppIcon name="download" size={25} /></span>
-        <h2 class="mt-4 text-[21px] font-semibold">Подключите устройство</h2>
-        <ol class="setup-steps">
-          <li>Скачайте Happ на ваше устройство.</li>
-          <li>Откройте сканер QR-кодов в приложении.</li>
-          <li>Отсканируйте код или вставьте ссылку вручную.</li>
+      <section class="surface p-[18px]">
+        <div class="flex items-start gap-3">
+          <span class="lg-icon-badge h-11 w-11 rounded-[16px]">
+            <AppIcon name="download" size={21} />
+          </span>
+          <div>
+            <h2 class="m-0 text-[19px] font-medium">Подключите устройство</h2>
+            <p class="mt-[5px] mb-0 text-[12.5px] text-[color:var(--muted)]">
+              Три шага, около минуты
+            </p>
+          </div>
+        </div>
+
+        <ol class="mt-4 flex list-none flex-col gap-2.5 p-0">
+          <li class="setup-step">
+            <span class="lg-btn-accent setup-step-number">1</span>
+            <span
+              >Скачайте приложение <strong class="font-semibold">Happ</strong
+              ></span
+            >
+          </li>
+          <li class="setup-step">
+            <span class="lg-btn-accent setup-step-number">2</span>
+            <span>Откройте в нём сканер QR-кодов</span>
+          </li>
+          <li class="setup-step">
+            <span class="lg-btn-accent setup-step-number">3</span>
+            <span>Отсканируйте код или вставьте ссылку</span>
+          </li>
         </ol>
 
         {#if subscription.qrCodeDataUrl}
-          <img
-            class="setup-qr"
-            src={subscription.qrCodeDataUrl}
-            alt="QR-код ссылки подключения"
-            width="196"
-            height="196"
-          />
+          <div class="setup-qr">
+            <img
+              src={subscription.qrCodeDataUrl}
+              alt="QR-код ссылки подключения"
+              width="188"
+              height="188"
+            />
+          </div>
         {:else}
-          <p
-            class="mt-5 rounded-[15px] bg-[color:var(--color-card-raised)] px-3 py-3 text-center text-xs text-[color:var(--color-muted)]"
-          >
+          <p class="lg-error mt-4 text-center">
             QR-код недоступен. Используйте ссылку ниже.
           </p>
         {/if}
+        <p
+          class="mt-3 mb-0 text-center text-[11.5px] text-[color:var(--faint)]"
+        >
+          Код и ссылка — личные. Не передавайте их другим.
+        </p>
 
-        <button class="setup-link" type="button" onclick={copySubscriptionUrl}>
+        <button
+          class="setup-link mt-3.5"
+          type="button"
+          onclick={copySubscriptionUrl}
+        >
           <span class="min-w-0 flex-1 truncate"
             >{subscription.subscriptionUrl}</span
           >
-          <AppIcon name="copy" size={20} />
+          <AppIcon name="copy" size={19} />
         </button>
         {#if copyMessage}
           <p
-            class="mt-2 text-center text-xs text-[color:var(--color-accent)]"
+            class="mt-2 mb-0 text-center text-xs text-[color:var(--accent-deep)]"
             role="status"
           >
             {copyMessage}
@@ -88,25 +119,34 @@
         {/if}
       </section>
     {:else if subscription.status === "provisioning" || subscription.status === "provisioning_failed"}
-      <section class="surface rounded-[28px] p-5">
-        <span class="setup-icon"><AppIcon name="shield" size={25} /></span>
-        <h2 class="mt-4 text-[21px] font-semibold">Доступ ещё создаётся</h2>
-        <p class="mt-2 text-sm leading-6 text-[color:var(--color-muted)]">
+      <section class="surface p-[18px]">
+        <span class="lg-icon-badge h-11 w-11 rounded-[16px]">
+          <AppIcon name="shield" size={21} />
+        </span>
+        <h2 class="mt-3.5 mb-0 text-[19px] font-medium">
+          Доступ ещё создаётся
+        </h2>
+        <p
+          class="mt-1.5 mb-0 text-[13px] leading-normal text-[color:var(--muted)]"
+        >
           Оплата получена. Вернитесь позже — QR-код появится автоматически.
         </p>
       </section>
     {:else}
-      <section class="surface rounded-[28px] p-5">
-        <span class="setup-icon"><AppIcon name="shield" size={25} /></span>
-        <h2 class="mt-4 text-[21px] font-semibold">Сначала выберите тариф</h2>
-        <p class="mt-2 text-sm leading-6 text-[color:var(--color-muted)]">
-          После подтверждённой оплаты здесь появятся QR-код и ссылка
-          подключения.
-        </p>
-        <a
-          class="mt-5 flex min-h-12 items-center justify-center rounded-[16px] bg-[color:var(--color-accent)] px-4 py-3 text-sm font-semibold text-[color:var(--color-button-text)]"
-          href={resolve("/")}
+      <section class="surface p-[18px]">
+        <span class="lg-icon-badge h-11 w-11 rounded-[16px]">
+          <AppIcon name="shield" size={21} />
+        </span>
+        <h2 class="mt-3.5 mb-0 text-[19px] font-medium">
+          Сначала выберите тариф
+        </h2>
+        <p
+          class="mt-1.5 mb-0 text-[13px] leading-normal text-[color:var(--muted)]"
         >
+          QR-код и ссылка подключения появятся сразу после подтверждённой
+          оплаты.
+        </p>
+        <a class="lg-btn-primary mt-4 w-full text-[14.5px]" href={resolve("/")}>
           Выбрать тариф
         </a>
       </section>

@@ -210,12 +210,14 @@ test("shows the anonymous dashboard outside Telegram", async ({ page }) => {
     "true",
   );
 
-  await page.getByRole("button", { exact: true, name: "Настроить" }).click();
+  await page.getByRole("button", { exact: true, name: "Установить" }).click();
+  const hintDialog = page.getByRole("dialog", {
+    name: "Сначала выберите тариф",
+  });
+  await expect(hintDialog).toBeVisible();
+  await hintDialog.getByRole("button", { name: "Выбрать тариф" }).click();
   const plansDialog = page.getByRole("dialog", { name: "Тарифы" });
   await expect(plansDialog).toBeVisible();
-  await expect(
-    plansDialog.getByText("Для настройки сначала выберите подходящий тариф."),
-  ).toBeVisible();
   await plansDialog.getByLabel("Закрыть выбор тарифа").click();
 
   const profileNavigation = page.getByRole("link", {
@@ -262,10 +264,10 @@ test("completes signed auth, discounted payment and idempotent provisioning", as
   );
   const promoButton = page.getByRole("button", {
     exact: true,
-    name: "Промокод",
+    name: "Промокоды",
   });
   await promoButton.click();
-  const promoDialog = page.getByRole("dialog", { name: "Промокод" });
+  const promoDialog = page.getByRole("dialog", { name: "Промокоды" });
   await expect(promoDialog).toBeVisible();
   await promoDialog.locator("#promo-code").fill("E2E20");
   await promoDialog.getByRole("button", { name: "Применить" }).click();
