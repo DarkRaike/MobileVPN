@@ -82,8 +82,11 @@ function verifyHash(
     throw new TelegramAuthError("AUTH_INIT_DATA_INVALID");
   }
 
+  // Only `hash` is excluded here. `signature` belongs to the Ed25519 third
+  // party method and stays part of the bot token data check string, so every
+  // other received field has to be included for the HMAC to match Telegram.
   const dataCheckString = [...parameters.entries()]
-    .filter(([key]) => key !== "hash" && key !== "signature")
+    .filter(([key]) => key !== "hash")
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, value]) => `${key}=${value}`)
     .join("\n");
