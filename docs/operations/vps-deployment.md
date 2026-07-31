@@ -18,6 +18,7 @@ REALITY и Telegram Mini App на одном сервере, и что оста�
 | Production image не содержал seed тарифов                                                                                                                                                                                        | на чистой базе «Главная» оставалась пустой                                                              |
 | `backup` входил в набор по умолчанию и требовал restic repository                                                                                                                                                                | без настроенного offsite storage сервис уходил в restart loop                                           |
 | Telegram webhook нигде не регистрировался                                                                                                                                                                                        | `message.successful_payment` не доходил до приложения                                                   |
+| `UVICORN_HOST=0.0.0.0` без SSL-файлов игнорируется Marzban                                                                                                                                                                       | Marzban слушал только `127.0.0.1`, и `http://marzban:8000` из приложения давал `ECONNREFUSED`           |
 
 Правильными и сохранёнными остались: pinned images по digest, `read_only`
 контейнеры, `cap_drop: ALL`, `no-new-privileges`, разделение volumes приложения
@@ -31,11 +32,11 @@ REALITY и Telegram Mini App на одном сервере, и что оста�
 | `bootstrap`        | one-shot: генерирует секреты, REALITY-ключи, `xray_config.json` и env-файлы |
 | `marzban-init`     | one-shot: `alembic upgrade head` и `marzban-cli admin import-from-env -y`   |
 | `app-init`         | one-shot: Drizzle migrations и идемпотентный seed тарифов 7/30/90           |
-| `marzban`          | панель Marzban на внутреннем `8000` и Xray REALITY на `8443/tcp`            |
+| `marzban`          | Marzban на Unix-сокете и Xray REALITY на `8443/tcp`                         |
 | `app`              | SvelteKit Node server на внутреннем `3000`                                  |
 | `worker`           | reconciliation и provisioning retry                                         |
 | `monitoring`       | внутренние сигналы и Telegram alerting                                      |
-| `reverse-proxy`    | Caddy, HTTPS и маршрутизация трёх host role                                 |
+| `reverse-proxy`    | Caddy, HTTPS, три host role и приватный доступ к Marzban API                |
 | `backup`           | profile `backup`: ежечасный restic snapshot                                 |
 | `telegram-webhook` | profile `telegram`: разовый `setWebhook`                                    |
 
@@ -46,6 +47,25 @@ REALITY и Telegram Mini App на одном сервере, и что оста�
 Секреты генерируются после разбора Compose-файла, поэтому сервисы не могут
 получить их через `env_file`. Вместо этого `deployment/bootstrap/with-env.sh`
 загружает нужный файл на старте контейнера и запускает реальную команду.
+
+Обратная сторона: Compose не видит изменений внутри сгенерированных env-файлов,
+поэтому после правки `deployment/production.env` затронутые сервисы нужно
+пересоздавать явно:
+
+```bash
+docker compose --env-file deployment/production.env -f deployment/compose.production.yaml up -d --force-recreate app worker monitoring
+```
+
+### Доступ к Marzban API
+
+Без `UVICORN_SSL_CERTFILE` Marzban намеренно слушает только loopback, поэтому
+он запускается на Unix-сокете в отдельном volume `marzban-socket` — это вариант,
+который рекомендует сам Marzban. Caddy проксирует сокет и владеет сетевым
+алиасом `marzban` в сети `backend`, поэтому `MARZBAN_BASE_URL=http://marzban:8000`
+из `tech.md` продолжает работать без изменений в приложении.
+
+Контейнер Marzban при этом не подключён к `backend`: он остаётся только в
+`vpn-egress`, и до его API нельзя достучаться в обход reverse proxy.
 
 ## 3. Запуск на VPS
 
@@ -123,14 +143,20 @@ REALITY и Telegram Mini App на одном сервере, и что оста�
 
 Учётная запись администратора создаётся автоматически из `SUDO_USERNAME` и
 `SUDO_PASSWORD`; пароль находится в `deployment/secrets/generated-secrets.json`.
-Команда `admin import-from-env -y` идемпотентна и синхронизирует пароль при
-каждом запуске стека.
+Креды попадают только в `marzban-init.env`, который читает разовый init-сервис;
+работающий контейнер Marzban их не получает.
+
+На Marzban `v0.8.4` команда `admin import-from-env` умеет только создавать
+администратора: её ветка синхронизации падает на валидации
+`AdminPartialModify`. Поэтому `marzban-init` сначала проверяет наличие админа в
+базе и запускает импорт только при его отсутствии. Смена пароля выполняется
+через `marzban-cli admin update`, а не правкой env.
 
 Порт `8000` не публикуется. Для доступа к панели используется временный
 override и SSH tunnel:
 
 ```bash
-docker compose --env-file deployment/production.env -f deployment/compose.production.yaml -f deployment/compose.admin-tunnel.yaml up -d marzban
+docker compose --env-file deployment/production.env -f deployment/compose.production.yaml -f deployment/compose.admin-tunnel.yaml up -d reverse-proxy
 ```
 
 ```bash

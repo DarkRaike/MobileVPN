@@ -46,6 +46,10 @@ services:
       - /tmp
     cap_drop:
       - ALL
+    # Generated application env files are handed to the unprivileged app user,
+    # which a root process without CAP_CHOWN cannot do.
+    cap_add:
+      - CHOWN
     security_opt:
       - no-new-privileges:true
     restart: "no"
@@ -62,11 +66,10 @@ services:
     entrypoint:
       - /bin/sh
       - /run/astra/bootstrap/with-env.sh
-      - /run/astra/secrets/marzban.env
+      - /run/astra/secrets/marzban-init.env
     command:
-      - bash
-      - -c
-      - alembic upgrade head && marzban-cli admin import-from-env -y
+      - sh
+      - /run/astra/bootstrap/marzban-init.sh
     network_mode: none
     volumes:
       - marzban-data:/var/lib/marzban
@@ -131,11 +134,16 @@ services:
       - "443:443"
       - "443:443/udp"
     networks:
-      - backend
-      - edge
+      backend:
+        # The application reaches the Marzban API at http://marzban:8000 through
+        # this proxy, which forwards to the Marzban Unix socket.
+        aliases:
+          - marzban
+      edge: {}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
+      - marzban-socket:/run/marzban
     read_only: true
     tmpfs:
       - /config
@@ -229,6 +237,8 @@ services:
         condition: service_healthy
       marzban:
         condition: service_healthy
+      reverse-proxy:
+        condition: service_healthy
     environment:
       INTERNAL_JOB_URL: http://app:3000/api/internal/jobs/reconcile
       NODE_ENV: production
@@ -307,17 +317,17 @@ services:
       - /run/astra/bootstrap/with-env.sh
       - /run/astra/secrets/marzban.env
     command:
-      - python3
-      - main.py
+      - sh
+      - /run/astra/bootstrap/marzban-run.sh
     ports:
       - "${VLESS_PORT:-8443}:${VLESS_PORT:-8443}/tcp"
-    expose:
-      - "8000"
+    # Marzban stays off the backend network: the API is reachable only through
+    # the reverse proxy, which owns the `marzban` alias there.
     networks:
-      - backend
       - vpn-egress
     volumes:
       - marzban-data:/var/lib/marzban
+      - marzban-socket:/run/marzban
       - ./bootstrap:/run/astra/bootstrap:ro
       - ${DEPLOY_SECRET_DIRECTORY:-./secrets}:/run/astra/secrets:ro
     read_only: true
@@ -333,7 +343,7 @@ services:
           "CMD",
           "python3",
           "-c",
-          "import socket;s=socket.create_connection(('127.0.0.1',8000),3);s.close()",
+          "import socket;s=socket.socket(socket.AF_UNIX);s.settimeout(3);s.connect('/run/marzban/uvicorn.sock');s.close()",
         ]
       interval: 15s
       timeout: 5s
@@ -438,4 +448,5 @@ volumes:
   backup-work:
   caddy-data:
   marzban-data:
+  marzban-socket:
   operations-state:

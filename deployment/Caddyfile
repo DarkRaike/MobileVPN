@@ -24,7 +24,13 @@ sub.{$BASE_DOMAIN} {
 	respond @denied 404
 
 	@subscription path /sub/*
-	reverse_proxy @subscription marzban:8000
+	reverse_proxy @subscription unix//run/marzban/uvicorn.sock
 
 	respond 404
+}
+
+# Private Marzban API for the application. Reachable only inside the internal
+# `backend` network, where this proxy answers to the `marzban` alias.
+:8000 {
+	reverse_proxy unix//run/marzban/uvicorn.sock
 }

@@ -16,6 +16,7 @@ import re
 import secrets
 import shlex
 import subprocess
+import tempfile
 import sys
 from base64 import urlsafe_b64encode
 from pathlib import Path
@@ -32,6 +33,7 @@ REALITY_CLIENT_FILE = SECRETS_DIRECTORY / "reality-client.json"
 # Runtime container paths, not host paths: services read the rendered files from
 # the same read-only bind mount.
 CONTAINER_SECRETS_DIRECTORY = "/run/astra/secrets"
+MARZBAN_SOCKET_PATH = "/run/marzban/uvicorn.sock"
 
 DOMAIN_PATTERN = re.compile(
     r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
@@ -175,18 +177,30 @@ def write_file(
 ) -> None:
     """Replace a generated file atomically.
 
-    The container drops every capability, so a root process cannot rewrite the
-    restrictive files it created on an earlier run. Writing a fresh temporary
-    file and renaming it over the target keeps repeated runs working.
+    The container keeps only CAP_CHOWN, so the mode has to be applied while the
+    temporary file still belongs to root, and ownership is handed over last.
+    Renaming over the target also avoids rewriting the read-only files that an
+    earlier run created; a unique temporary name keeps a failed run from
+    blocking the next one.
     """
-    temporary_path = path.with_name(f"{path.name}.tmp")
-    temporary_path.write_text(content, encoding="utf-8", newline="\n")
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent, prefix=f"{path.name}.", suffix=".tmp"
+    )
+    temporary_path = Path(temporary_name)
 
-    if owner is not None:
-        os.chown(temporary_path, owner[0], owner[1])
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(content)
 
-    os.chmod(temporary_path, mode)
-    os.replace(temporary_path, path)
+        os.chmod(temporary_path, mode)
+
+        if owner is not None:
+            os.chown(temporary_path, owner[0], owner[1])
+
+        os.replace(temporary_path, path)
+    except BaseException:
+        temporary_path.unlink(missing_ok=True)
+        raise
 
 
 def write_private_file(path: Path, content: str) -> None:
@@ -378,38 +392,54 @@ def main() -> int:
         application_uid,
         application_gid,
     )
+    alert_chat_id = read_environment("ALERT_TELEGRAM_CHAT_ID")
+    monitoring_environment = {
+        "ALERT_REPEAT_MILLISECONDS": str(
+            positive_integer_environment("ALERT_REPEAT_MILLISECONDS", 1800000)
+        ),
+        "MONITORING_INTERVAL_MILLISECONDS": str(
+            positive_integer_environment("MONITORING_INTERVAL_MILLISECONDS", 60000)
+        ),
+        "MONITORING_SECRET": generated["MONITORING_SECRET"],
+    }
+
+    # The worker refuses a half configured alert channel, so the Telegram pair is
+    # written only once the operator has chosen an alert chat.
+    if alert_chat_id:
+        monitoring_environment["ALERT_TELEGRAM_CHAT_ID"] = alert_chat_id
+        monitoring_environment["TELEGRAM_BOT_TOKEN"] = telegram_bot_token
+
     write_application_file(
         SECRETS_DIRECTORY / "monitoring.env",
-        render_env_file(
-            {
-                "ALERT_REPEAT_MILLISECONDS": str(
-                    positive_integer_environment("ALERT_REPEAT_MILLISECONDS", 1800000)
-                ),
-                "ALERT_TELEGRAM_CHAT_ID": read_environment("ALERT_TELEGRAM_CHAT_ID"),
-                "MONITORING_INTERVAL_MILLISECONDS": str(
-                    positive_integer_environment("MONITORING_INTERVAL_MILLISECONDS", 60000)
-                ),
-                "MONITORING_SECRET": generated["MONITORING_SECRET"],
-                "TELEGRAM_BOT_TOKEN": telegram_bot_token,
-            }
-        ),
+        render_env_file(monitoring_environment),
         application_uid,
         application_gid,
     )
+    # Without SSL files Marzban deliberately binds to loopback, so it listens on
+    # a Unix socket and Caddy publishes it on the private Docker network.
+    marzban_environment = {
+        "DEBUG": "False",
+        "DOCS": "False",
+        "SQLALCHEMY_DATABASE_URL": "sqlite:////var/lib/marzban/db.sqlite3",
+        "UVICORN_UDS": MARZBAN_SOCKET_PATH,
+        "XRAY_JSON": f"{CONTAINER_SECRETS_DIRECTORY}/xray_config.json",
+        "XRAY_SUBSCRIPTION_PATH": "sub",
+        "XRAY_SUBSCRIPTION_URL_PREFIX": f"https://sub.{base_domain}",
+    }
+
     write_private_file(
-        SECRETS_DIRECTORY / "marzban.env",
+        SECRETS_DIRECTORY / "marzban.env", render_env_file(marzban_environment)
+    )
+    # Marzban authenticates admins against its own database and asks for the
+    # sudo credentials to be removed once imported, so only the one-shot init
+    # service receives them.
+    write_private_file(
+        SECRETS_DIRECTORY / "marzban-init.env",
         render_env_file(
             {
-                "DEBUG": "False",
-                "DOCS": "False",
-                "SQLALCHEMY_DATABASE_URL": "sqlite:////var/lib/marzban/db.sqlite3",
+                **marzban_environment,
                 "SUDO_PASSWORD": generated["MARZBAN_PASSWORD"],
                 "SUDO_USERNAME": marzban_username,
-                "UVICORN_HOST": "0.0.0.0",
-                "UVICORN_PORT": "8000",
-                "XRAY_JSON": f"{CONTAINER_SECRETS_DIRECTORY}/xray_config.json",
-                "XRAY_SUBSCRIPTION_PATH": "sub",
-                "XRAY_SUBSCRIPTION_URL_PREFIX": f"https://sub.{base_domain}",
             }
         ),
     )
