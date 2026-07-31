@@ -30,7 +30,7 @@ REALITY и Telegram Mini App на одном сервере, и что оста�
 | Сервис             | Роль                                                                        |
 | ------------------ | --------------------------------------------------------------------------- |
 | `bootstrap`        | one-shot: генерирует секреты, REALITY-ключи, `xray_config.json` и env-файлы |
-| `marzban-init`     | one-shot: `alembic upgrade head` и `marzban-cli admin import-from-env -y`   |
+| `marzban-init`     | one-shot: `alembic upgrade head` и создание админа, если его ещё нет        |
 | `app-init`         | one-shot: Drizzle migrations и идемпотентный seed тарифов 7/30/90           |
 | `marzban`          | Marzban на Unix-сокете и Xray REALITY на `8443/tcp`                         |
 | `app`              | SvelteKit Node server на внутреннем `3000`                                  |
@@ -67,7 +67,25 @@ docker compose --env-file deployment/production.env -f deployment/compose.produc
 Контейнер Marzban при этом не подключён к `backend`: он остаётся только в
 `vpn-egress`, и до его API нельзя достучаться в обход reverse proxy.
 
-## 3. Запуск на VPS
+## 3. DNS
+
+До первого запуска у регистратора домена создаются три `A`-записи на публичный
+IP VPS:
+
+| Тип | Имя   | Значение   | Роль                                    |
+| --- | ----- | ---------- | --------------------------------------- |
+| A   | `app` | `<IP VPS>` | Mini App и `POST /api/telegram/webhook` |
+| A   | `sub` | `<IP VPS>` | Marzban `/sub/*`                        |
+| A   | `vpn` | `<IP VPS>` | VLESS REALITY на `VLESS_PORT`           |
+
+Если DNS обслуживает Cloudflare, для всех трёх записей проксирование должно быть
+выключено (серое облако): оранжевое облако подменяет TLS на `app`/`sub` и
+полностью ломает REALITY на `vpn`.
+
+Записи должны разойтись до `up -d`: Caddy запрашивает сертификаты по
+HTTP-01 challenge и без корректного DNS получит отказ.
+
+## 4. Запуск на VPS
 
 1. Установить Docker Engine с Compose plugin и открыть в firewall только
    `80/tcp`, `443/tcp`, `443/udp`, `8443/tcp` и SSH по operator IP allowlist.
@@ -99,7 +117,7 @@ docker compose --env-file deployment/production.env -f deployment/compose.produc
 `astra-vpn-app:${RELEASE_VERSION}` и `astra-vpn-operations:${RELEASE_VERSION}` и
 запускать стек с `--no-build`.
 
-## 4. Что генерируется автоматически
+## 5. Что генерируется автоматически
 
 `bootstrap` создаёт файлы в `DEPLOY_SECRET_DIRECTORY` (по умолчанию
 `deployment/secrets`, каталог `0711`, вне Git и вне build context):
@@ -110,7 +128,8 @@ docker compose --env-file deployment/production.env -f deployment/compose.produc
 | `app.env`                | `SESSION_SECRET`, `SUBSCRIPTION_URL_ENCRYPTION_KEY`, `INTERNAL_JOB_SECRET`, `MONITORING_SECRET`, `TELEGRAM_WEBHOOK_SECRET`, Marzban credentials |
 | `worker.env`             | секреты reconciliation worker                                                                                                                   |
 | `monitoring.env`         | секреты и параметры alerting                                                                                                                    |
-| `marzban.env`            | `SUDO_USERNAME`, `SUDO_PASSWORD`, `XRAY_JSON`, `XRAY_SUBSCRIPTION_URL_PREFIX`                                                                   |
+| `marzban.env`            | `UVICORN_UDS`, `XRAY_JSON`, `XRAY_SUBSCRIPTION_URL_PREFIX`                                                                                      |
+| `marzban-init.env`       | то же плюс `SUDO_USERNAME` и `SUDO_PASSWORD` для разового импорта админа                                                                        |
 | `xray_config.json`       | inbound `VLESS_TCP_REALITY_V1` с приватным ключом и short ID                                                                                    |
 | `reality-client.json`    | публичные параметры подключения: public key, short ID, SNI, порт                                                                                |
 | `restic_password`        | пароль restic repository                                                                                                                        |
@@ -126,7 +145,7 @@ docker compose --env-file deployment/production.env -f deployment/compose.produc
 Ротация выполняется удалением конкретного ключа из `generated-secrets.json` и
 повторным запуском стека.
 
-## 5. Домен-заглушка
+## 6. Домен-заглушка
 
 `BASE_DOMAIN=example.com` в примере — заглушка. До покупки домена:
 
@@ -139,7 +158,7 @@ docker compose --env-file deployment/production.env -f deployment/compose.produc
 заменить `BASE_DOMAIN` и перезапустить стек. `BASE_DOMAIN` участвует в проверке
 конфигурации приложения: домены `.example`, `.test` и `localhost` отклоняются.
 
-## 6. Marzban
+## 7. Marzban
 
 Учётная запись администратора создаётся автоматически из `SUDO_USERNAME` и
 `SUDO_PASSWORD`; пароль находится в `deployment/secrets/generated-secrets.json`.
@@ -169,7 +188,7 @@ Xray config подключается read-only, поэтому изменени�
 сохраняются: конфигурация меняется только через
 `deployment/xray/xray_config.template.json` и переменные стека.
 
-## 7. Telegram webhook
+## 8. Telegram webhook
 
 Регистрация webhook — отдельная явная операция, потому что она меняет настройки
 бота на стороне Telegram:
@@ -183,7 +202,7 @@ docker compose --env-file deployment/production.env -f deployment/compose.produc
 Она требует уже выпущенного сертификата, поэтому выполняется после настройки
 реального домена.
 
-## 8. Backup
+## 9. Backup
 
 Ежечасный restic backup выключен по умолчанию, чтобы стек поднимался без
 внешнего storage. Порядок включения:
@@ -197,7 +216,7 @@ docker compose --env-file deployment/production.env -f deployment/compose.produc
 До включения backup production launch запрещён: gates `offsite_backup` и
 `restore_drill` остаются открытыми.
 
-## 9. Что остаётся ручным
+## 10. Что остаётся ручным
 
 `ENABLE_LIVE_OPERATIONS=false` — состояние по умолчанию. Приложение и Marzban
 работают, но реальные платежи и выдача реального VPN-доступа выключены.
