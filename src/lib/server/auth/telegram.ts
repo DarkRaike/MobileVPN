@@ -2,6 +2,16 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { z } from "zod";
 
+// Telegram omits optional user fields on some clients and sends them empty on
+// others, so an empty value is treated as absent rather than as invalid data.
+function optionalUserField<Schema extends z.ZodTypeAny>(schema: Schema) {
+  return z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim() === "" ? undefined : value,
+    schema.optional(),
+  );
+}
+
 const telegramUserSchema = z.object({
   first_name: z.string().trim().min(1).max(64),
   id: z
@@ -10,14 +20,15 @@ const telegramUserSchema = z.object({
       z.number().int().nonnegative().safe(),
     ])
     .transform(String),
-  language_code: z.string().trim().min(2).max(16).optional(),
-  last_name: z.string().trim().min(1).max(64).optional(),
-  photo_url: z.string().url().max(2048).optional(),
-  username: z
-    .string()
-    .trim()
-    .regex(/^[A-Za-z0-9_]{1,32}$/)
-    .optional(),
+  language_code: optionalUserField(z.string().trim().min(2).max(16)),
+  last_name: optionalUserField(z.string().trim().min(1).max(64)),
+  photo_url: optionalUserField(z.string().url().max(2048)),
+  username: optionalUserField(
+    z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9_]{1,32}$/),
+  ),
 });
 
 const HASH_PATTERN = /^[a-fA-F0-9]{64}$/;
@@ -42,8 +53,22 @@ export interface ValidatedTelegramInitData {
 export type TelegramAuthErrorCode =
   "AUTH_INIT_DATA_EXPIRED" | "AUTH_INIT_DATA_INVALID";
 
+/** Server side detail for logs; never returned to the browser. */
+export type TelegramAuthErrorReason =
+  | "auth_date_future"
+  | "auth_date_malformed"
+  | "auth_date_stale"
+  | "hash_malformed"
+  | "hash_mismatch"
+  | "init_data_malformed"
+  | "user_malformed"
+  | "user_missing";
+
 export class TelegramAuthError extends Error {
-  constructor(readonly code: TelegramAuthErrorCode) {
+  constructor(
+    readonly code: TelegramAuthErrorCode,
+    readonly reason: TelegramAuthErrorReason,
+  ) {
     super(code);
     this.name = "TelegramAuthError";
   }
@@ -55,7 +80,10 @@ function parseUniqueParameters(initData: string): Map<string, string> {
     Buffer.byteLength(initData, "utf8") > MAX_INIT_DATA_BYTES ||
     initData.includes("\0")
   ) {
-    throw new TelegramAuthError("AUTH_INIT_DATA_INVALID");
+    throw new TelegramAuthError(
+      "AUTH_INIT_DATA_INVALID",
+      "init_data_malformed",
+    );
   }
 
   const parsed = new URLSearchParams(initData);
@@ -63,7 +91,10 @@ function parseUniqueParameters(initData: string): Map<string, string> {
 
   for (const [key, value] of parsed) {
     if (!key || parameters.has(key)) {
-      throw new TelegramAuthError("AUTH_INIT_DATA_INVALID");
+      throw new TelegramAuthError(
+        "AUTH_INIT_DATA_INVALID",
+        "init_data_malformed",
+      );
     }
 
     parameters.set(key, value);
@@ -79,7 +110,7 @@ function verifyHash(
   const receivedHash = parameters.get("hash");
 
   if (!receivedHash || !HASH_PATTERN.test(receivedHash)) {
-    throw new TelegramAuthError("AUTH_INIT_DATA_INVALID");
+    throw new TelegramAuthError("AUTH_INIT_DATA_INVALID", "hash_malformed");
   }
 
   // Only `hash` is excluded here. `signature` belongs to the Ed25519 third
@@ -103,7 +134,7 @@ function verifyHash(
     receivedHashBuffer.length !== expectedHash.length ||
     !timingSafeEqual(receivedHashBuffer, expectedHash)
   ) {
-    throw new TelegramAuthError("AUTH_INIT_DATA_INVALID");
+    throw new TelegramAuthError("AUTH_INIT_DATA_INVALID", "hash_mismatch");
   }
 }
 
@@ -113,7 +144,10 @@ function parseAuthDate(
   maximumAgeSeconds: number,
 ): Date {
   if (!value || !/^\d{1,12}$/.test(value)) {
-    throw new TelegramAuthError("AUTH_INIT_DATA_INVALID");
+    throw new TelegramAuthError(
+      "AUTH_INIT_DATA_INVALID",
+      "auth_date_malformed",
+    );
   }
 
   const timestampSeconds = Number(value);
@@ -123,11 +157,11 @@ function parseAuthDate(
     !Number.isSafeInteger(timestampSeconds) ||
     timestampSeconds > nowSeconds + MAX_FUTURE_CLOCK_SKEW_SECONDS
   ) {
-    throw new TelegramAuthError("AUTH_INIT_DATA_INVALID");
+    throw new TelegramAuthError("AUTH_INIT_DATA_INVALID", "auth_date_future");
   }
 
   if (nowSeconds - timestampSeconds > maximumAgeSeconds) {
-    throw new TelegramAuthError("AUTH_INIT_DATA_EXPIRED");
+    throw new TelegramAuthError("AUTH_INIT_DATA_EXPIRED", "auth_date_stale");
   }
 
   return new Date(timestampSeconds * 1000);
@@ -135,7 +169,7 @@ function parseAuthDate(
 
 function parseUser(value: string | undefined): TelegramUser {
   if (!value) {
-    throw new TelegramAuthError("AUTH_INIT_DATA_INVALID");
+    throw new TelegramAuthError("AUTH_INIT_DATA_INVALID", "user_missing");
   }
 
   try {
@@ -150,7 +184,7 @@ function parseUser(value: string | undefined): TelegramUser {
       username: parsed.username,
     };
   } catch {
-    throw new TelegramAuthError("AUTH_INIT_DATA_INVALID");
+    throw new TelegramAuthError("AUTH_INIT_DATA_INVALID", "user_malformed");
   }
 }
 

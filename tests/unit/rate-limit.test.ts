@@ -2,7 +2,24 @@ import { randomUUID } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import { InMemoryRateLimiter } from "../../src/lib/server/security/rate-limit";
+import {
+  InMemoryRateLimiter,
+  resolveInternalClientKey,
+} from "../../src/lib/server/security/rate-limit";
+
+describe("resolveInternalClientKey", () => {
+  it("uses the client address when the adapter can resolve it", () => {
+    expect(resolveInternalClientKey(() => "203.0.113.7")).toBe("203.0.113.7");
+  });
+
+  it("falls back to a shared key when the address header is absent", () => {
+    expect(
+      resolveInternalClientKey(() => {
+        throw new Error("Address header was specified but is absent");
+      }),
+    ).toBe("internal");
+  });
+});
 
 describe("InMemoryRateLimiter", () => {
   it("blocks requests after the limit until the window resets", () => {

@@ -17,6 +17,7 @@ import {
 import { upsertTelegramUser } from "$lib/server/auth/users";
 import { getRuntimeConfig } from "$lib/server/config/runtime";
 import { getDatabase } from "$lib/server/db/runtime";
+import { logEvent } from "$lib/server/observability/logger";
 import { consumeRateLimit } from "$lib/server/security/rate-limit";
 
 const requestSchema = z
@@ -172,6 +173,13 @@ export const POST: RequestHandler = async ({
       ).user;
     } catch (error) {
       if (error instanceof TelegramAuthError) {
+        // The reason narrows down a rejected sign-in without exposing it to the
+        // browser or writing any part of the init data to the log.
+        logEvent("warn", {
+          errorCode: error.code,
+          reason: error.reason,
+          route: "/api/auth/telegram",
+        });
         deleteSessionCookie(cookies, config);
         return errorResponse(
           error.code,

@@ -11,7 +11,10 @@ import {
   runProvisioningBatch,
 } from "$lib/server/modules/subscriptions/provisioning";
 import { constantTimeEquals } from "$lib/server/security/constant-time";
-import { consumeRateLimit } from "$lib/server/security/rate-limit";
+import {
+  consumeRateLimit,
+  resolveInternalClientKey,
+} from "$lib/server/security/rate-limit";
 
 import type { RequestHandler } from "./$types";
 
@@ -39,7 +42,7 @@ export const POST: RequestHandler = async ({ getClientAddress, request }) => {
   }
 
   const rateLimit = consumeRateLimit(
-    `reconciliation-job:${getClientAddress()}`,
+    `reconciliation-job:${resolveInternalClientKey(getClientAddress)}`,
     JOB_RATE_LIMIT,
     JOB_RATE_LIMIT_WINDOW_SECONDS,
   );
