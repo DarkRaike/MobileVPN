@@ -29,8 +29,10 @@ function createInitData(overrides: Record<string, string> = {}): string {
     parameters.set(key, value);
   }
 
+  // Mirrors Telegram: the bot token data check string excludes only `hash`,
+  // so the `signature` field above must take part in the HMAC.
   const dataCheckString = [...parameters.entries()]
-    .filter(([key]) => key !== "hash" && key !== "signature")
+    .filter(([key]) => key !== "hash")
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, value]) => `${key}=${value}`)
     .join("\n");
@@ -63,6 +65,31 @@ describe("validateTelegramInitData", () => {
       username: "darkraike",
     });
     expect(result.authDate).toEqual(NOW);
+  });
+
+  it("rejects a hash that omits the signature field", () => {
+    const parameters = new URLSearchParams(createInitData());
+    parameters.delete("hash");
+    const withoutSignature = [...parameters.entries()]
+      .filter(([key]) => key !== "signature")
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, value]) => `${key}=${value}`)
+      .join("\n");
+    const secretKey = createHmac("sha256", "WebAppData")
+      .update(BOT_TOKEN)
+      .digest();
+    parameters.set(
+      "hash",
+      createHmac("sha256", secretKey).update(withoutSignature).digest("hex"),
+    );
+
+    expect(() =>
+      validateTelegramInitData(parameters.toString(), BOT_TOKEN, 300, NOW),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "AUTH_INIT_DATA_INVALID",
+      }),
+    );
   });
 
   it("rejects a modified hash", () => {
