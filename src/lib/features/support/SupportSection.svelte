@@ -47,7 +47,7 @@
 <article class="surface mb-6 overflow-hidden rounded-[27px]">
   <div class="flex items-center gap-3 p-4">
     <span
-      class="grid h-14 w-14 shrink-0 place-items-center rounded-[18px] bg-[color:color-mix(in_srgb,var(--color-accent)_11%,transparent)] text-[color:var(--color-accent)]"
+      class="grid h-14 w-14 shrink-0 place-items-center rounded-[18px] bg-[color:var(--color-card-raised)] text-[color:var(--color-muted)]"
     >
       <AppIcon name="support" size={27} />
     </span>
@@ -57,9 +57,7 @@
         Ответ придёт в Telegram
       </p>
     </div>
-    <span
-      class="h-3 w-3 rounded-full bg-[color:var(--color-accent)] shadow-[0_0_13px_color-mix(in_srgb,var(--color-accent)_70%,transparent)]"
-    ></span>
+    <span class="h-2.5 w-2.5 rounded-full bg-[#55c98b]"></span>
   </div>
   <div
     class="flex items-center justify-between border-t border-[color:var(--color-border)] px-5 py-3 text-sm text-[color:var(--color-muted)]"
