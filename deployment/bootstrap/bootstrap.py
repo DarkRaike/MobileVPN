@@ -170,15 +170,31 @@ def ensure_generated_secrets(marzban_username: str) -> dict[str, str]:
     return generated
 
 
+def write_file(
+    path: Path, content: str, mode: int, owner: tuple[int, int] | None = None
+) -> None:
+    """Replace a generated file atomically.
+
+    The container drops every capability, so a root process cannot rewrite the
+    restrictive files it created on an earlier run. Writing a fresh temporary
+    file and renaming it over the target keeps repeated runs working.
+    """
+    temporary_path = path.with_name(f"{path.name}.tmp")
+    temporary_path.write_text(content, encoding="utf-8", newline="\n")
+
+    if owner is not None:
+        os.chown(temporary_path, owner[0], owner[1])
+
+    os.chmod(temporary_path, mode)
+    os.replace(temporary_path, path)
+
+
 def write_private_file(path: Path, content: str) -> None:
-    path.write_text(content, encoding="utf-8")
-    os.chmod(path, ROOT_FILE_MODE)
+    write_file(path, content, ROOT_FILE_MODE)
 
 
 def write_application_file(path: Path, content: str, uid: int, gid: int) -> None:
-    path.write_text(content, encoding="utf-8")
-    os.chown(path, uid, gid)
-    os.chmod(path, APPLICATION_FILE_MODE)
+    write_file(path, content, APPLICATION_FILE_MODE, (uid, gid))
 
 
 def render_env_file(values: dict[str, str]) -> str:

@@ -1,0 +1,13 @@
+# Temporary override that publishes the Marzban dashboard on loopback only.
+# Use it together with an SSH tunnel and remove it once the session is over:
+#
+#   docker compose --env-file deployment/production.env \
+#     -f deployment/compose.production.yaml \
+#     -f deployment/compose.admin-tunnel.yaml up -d marzban
+#   ssh -N -L 8000:127.0.0.1:8000 operator@vps
+#
+# The dashboard is never exposed publicly; Caddy answers 404 for /dashboard/*.
+services:
+  marzban:
+    ports:
+      - "127.0.0.1:8000:8000"

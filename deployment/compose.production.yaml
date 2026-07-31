@@ -1,6 +1,120 @@
 name: astra-vpn
 
+x-application-build: &application-build
+  context: ..
+  dockerfile: Dockerfile
+  target: production
+
+x-bootstrap-mounts: &bootstrap-mounts
+  - ./bootstrap:/run/astra/bootstrap:ro
+  - ${DEPLOY_SECRET_DIRECTORY:-./secrets}:/run/astra/secrets:ro
+
+x-marzban-image: &marzban-image gozargah/marzban:v0.8.4@sha256:8e422c21997e5d2e3fa231eeff73c0a19193c20fc02fa4958e9368abb9623b8d
+
 services:
+  bootstrap:
+    image: *marzban-image
+    init: true
+    environment:
+      ALERT_REPEAT_MILLISECONDS: ${ALERT_REPEAT_MILLISECONDS:-1800000}
+      ALERT_TELEGRAM_CHAT_ID: ${ALERT_TELEGRAM_CHAT_ID:-}
+      APP_GID: ${APP_GID:-1000}
+      APP_UID: ${APP_UID:-1000}
+      BASE_DOMAIN: ${BASE_DOMAIN:?Set BASE_DOMAIN}
+      ENABLE_LIVE_OPERATIONS: ${ENABLE_LIVE_OPERATIONS:-false}
+      MARZBAN_USERNAME: ${MARZBAN_USERNAME:-astra_admin}
+      MARZBAN_VLESS_INBOUND_TAG: ${MARZBAN_VLESS_INBOUND_TAG:-VLESS_TCP_REALITY_V1}
+      MONITORING_INTERVAL_MILLISECONDS: ${MONITORING_INTERVAL_MILLISECONDS:-60000}
+      PYTHONDONTWRITEBYTECODE: "1"
+      REALITY_DEST: ${REALITY_DEST:-www.microsoft.com:443}
+      REALITY_SERVER_NAMES: ${REALITY_SERVER_NAMES:-}
+      RECONCILIATION_INTERVAL_MILLISECONDS: ${RECONCILIATION_INTERVAL_MILLISECONDS:-30000}
+      TELEGRAM_ADMIN_USER_ID: ${TELEGRAM_ADMIN_USER_ID:?Set TELEGRAM_ADMIN_USER_ID}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN}
+      TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: ${TELEGRAM_INIT_DATA_MAX_AGE_SECONDS:-300}
+      VLESS_PORT: ${VLESS_PORT:-8443}
+    command:
+      - python3
+      - /run/astra/bootstrap/bootstrap.py
+    network_mode: none
+    volumes:
+      - ./bootstrap:/run/astra/bootstrap:ro
+      - ./xray:/run/astra/templates:ro
+      - ${DEPLOY_SECRET_DIRECTORY:-./secrets}:/run/astra/secrets
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
+  marzban-init:
+    image: *marzban-image
+    init: true
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    working_dir: /code
+    entrypoint:
+      - /bin/sh
+      - /run/astra/bootstrap/with-env.sh
+      - /run/astra/secrets/marzban.env
+    command:
+      - bash
+      - -c
+      - alembic upgrade head && marzban-cli admin import-from-env -y
+    network_mode: none
+    volumes:
+      - marzban-data:/var/lib/marzban
+      - ./bootstrap:/run/astra/bootstrap:ro
+      - ${DEPLOY_SECRET_DIRECTORY:-./secrets}:/run/astra/secrets:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
+  app-init:
+    image: astra-vpn-app:${RELEASE_VERSION:?Set RELEASE_VERSION}
+    build: *application-build
+    init: true
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    environment:
+      BACKUP_STATUS_FILE: /ops/backup-status.json
+      DATABASE_URL: /data/astra-vpn.sqlite
+      MARZBAN_BASE_URL: http://marzban:8000
+      NODE_ENV: production
+      ORIGIN: https://app.${BASE_DOMAIN:?Set BASE_DOMAIN}
+    entrypoint:
+      - /bin/sh
+      - /run/astra/bootstrap/with-env.sh
+      - /run/astra/secrets/app.env
+    command:
+      - node
+      - scripts/seed.mjs
+    network_mode: none
+    volumes:
+      - app-data:/data
+      - ./bootstrap:/run/astra/bootstrap:ro
+      - ${DEPLOY_SECRET_DIRECTORY:-./secrets}:/run/astra/secrets:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
   reverse-proxy:
     image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
     depends_on:
@@ -9,6 +123,7 @@ services:
       marzban:
         condition: service_healthy
     environment:
+      ACME_CA: ${ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
       ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
       BASE_DOMAIN: ${BASE_DOMAIN:?Set BASE_DOMAIN}
     ports:
@@ -48,10 +163,12 @@ services:
     restart: unless-stopped
 
   app:
-    image: ${APP_IMAGE:?Set immutable APP_IMAGE reference}
+    image: astra-vpn-app:${RELEASE_VERSION:?Set RELEASE_VERSION}
+    build: *application-build
     init: true
-    env_file:
-      - ${APP_ENV_FILE:?Set APP_ENV_FILE}
+    depends_on:
+      app-init:
+        condition: service_completed_successfully
     environment:
       ADDRESS_HEADER: X-Forwarded-For
       BACKUP_STATUS_FILE: /ops/backup-status.json
@@ -65,13 +182,23 @@ services:
       PORT: 3000
       PROTOCOL_HEADER: X-Forwarded-Proto
       XFF_DEPTH: 1
+    entrypoint:
+      - /bin/sh
+      - /run/astra/bootstrap/with-env.sh
+      - /run/astra/secrets/app.env
+    command:
+      - node
+      - build
     expose:
       - "3000"
     networks:
       - backend
+      - telegram-egress
     volumes:
       - app-data:/data
       - operations-state:/ops:ro
+      - ./bootstrap:/run/astra/bootstrap:ro
+      - ${DEPLOY_SECRET_DIRECTORY:-./secrets}:/run/astra/secrets:ro
     read_only: true
     tmpfs:
       - /tmp
@@ -94,23 +221,27 @@ services:
     restart: unless-stopped
 
   worker:
-    image: ${APP_IMAGE:?Set immutable APP_IMAGE reference}
+    image: astra-vpn-app:${RELEASE_VERSION:?Set RELEASE_VERSION}
+    build: *application-build
     init: true
     depends_on:
       app:
         condition: service_healthy
       marzban:
         condition: service_healthy
-    env_file:
-      - ${WORKER_ENV_FILE:?Set WORKER_ENV_FILE}
     environment:
       INTERNAL_JOB_URL: http://app:3000/api/internal/jobs/reconcile
       NODE_ENV: production
+    entrypoint:
+      - /bin/sh
+      - /run/astra/bootstrap/with-env.sh
+      - /run/astra/secrets/worker.env
     command:
       - node
       - scripts/reconciliation-worker.mjs
     networks:
       - backend
+    volumes: *bootstrap-mounts
     read_only: true
     tmpfs:
       - /tmp
@@ -127,21 +258,26 @@ services:
     restart: unless-stopped
 
   monitoring:
-    image: ${APP_IMAGE:?Set immutable APP_IMAGE reference}
+    image: astra-vpn-app:${RELEASE_VERSION:?Set RELEASE_VERSION}
+    build: *application-build
     init: true
     depends_on:
       app:
         condition: service_healthy
-    env_file:
-      - ${MONITORING_ENV_FILE:?Set MONITORING_ENV_FILE}
     environment:
       MONITORING_API_URL: http://app:3000/api/internal/monitoring
       NODE_ENV: production
+    entrypoint:
+      - /bin/sh
+      - /run/astra/bootstrap/with-env.sh
+      - /run/astra/secrets/monitoring.env
     command:
       - node
       - scripts/monitoring-worker.mjs
     networks:
       - backend
+      - telegram-egress
+    volumes: *bootstrap-mounts
     read_only: true
     tmpfs:
       - /tmp
@@ -158,18 +294,23 @@ services:
     restart: unless-stopped
 
   marzban:
-    image: gozargah/marzban:v0.8.4@sha256:8e422c21997e5d2e3fa231eeff73c0a19193c20fc02fa4958e9368abb9623b8d
+    image: *marzban-image
     init: true
-    env_file:
-      - ${MARZBAN_ENV_FILE:?Set MARZBAN_ENV_FILE}
+    depends_on:
+      marzban-init:
+        condition: service_completed_successfully
     environment:
-      DOCS: "False"
-      SQLALCHEMY_DATABASE_URL: sqlite:////var/lib/marzban/db.sqlite3
-      UVICORN_HOST: 0.0.0.0
-      UVICORN_PORT: 8000
-      XRAY_JSON: /var/lib/marzban/xray_config.json
+      PYTHONDONTWRITEBYTECODE: "1"
+    working_dir: /code
+    entrypoint:
+      - /bin/sh
+      - /run/astra/bootstrap/with-env.sh
+      - /run/astra/secrets/marzban.env
+    command:
+      - python3
+      - main.py
     ports:
-      - "8443:8443/tcp"
+      - "${VLESS_PORT:-8443}:${VLESS_PORT:-8443}/tcp"
     expose:
       - "8000"
     networks:
@@ -177,7 +318,8 @@ services:
       - vpn-egress
     volumes:
       - marzban-data:/var/lib/marzban
-      - ${XRAY_CONFIG_FILE:?Set XRAY_CONFIG_FILE}:/var/lib/marzban/xray_config.json:ro
+      - ./bootstrap:/run/astra/bootstrap:ro
+      - ${DEPLOY_SECRET_DIRECTORY:-./secrets}:/run/astra/secrets:ro
     read_only: true
     tmpfs:
       - /tmp
@@ -199,16 +341,50 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  backup:
-    image: ${OPERATIONS_IMAGE:?Set immutable OPERATIONS_IMAGE reference}
+  telegram-webhook:
+    image: astra-vpn-app:${RELEASE_VERSION:?Set RELEASE_VERSION}
+    build: *application-build
     init: true
+    profiles:
+      - telegram
+    environment:
+      NODE_ENV: production
+    entrypoint:
+      - /bin/sh
+      - /run/astra/bootstrap/with-env.sh
+      - /run/astra/secrets/app.env
+    command:
+      - node
+      - scripts/telegram-setup.mjs
+    networks:
+      - telegram-egress
+    volumes: *bootstrap-mounts
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
+  backup:
+    image: astra-vpn-operations:${RELEASE_VERSION:?Set RELEASE_VERSION}
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: operations
+    init: true
+    profiles:
+      - backup
     depends_on:
       app:
         condition: service_healthy
       marzban:
         condition: service_healthy
     env_file:
-      - ${BACKUP_ENV_FILE:?Set BACKUP_ENV_FILE}
+      - path: ./backup.env
+        required: false
     environment:
       APP_DATABASE_PATH: /source/app/astra-vpn.sqlite
       BACKUP_PUBLIC_INCLUDE_PATHS_JSON: '["/app/drizzle","/app/deployment"]'
@@ -217,7 +393,7 @@ services:
       BACKUP_WORK_DIRECTORY: /work
       MARZBAN_DATABASE_PATH: /source/marzban/db.sqlite3
       RELEASE_VERSION: ${RELEASE_VERSION:?Set RELEASE_VERSION}
-      RESTIC_PASSWORD_FILE: /run/secrets/restic_password
+      RESTIC_PASSWORD_FILE: /source/secrets/restic_password
       RESTORE_LIVE_PATHS_JSON: '["/source/app","/source/marzban","/ops"]'
     networks:
       - backup-egress
@@ -226,9 +402,7 @@ services:
       - marzban-data:/source/marzban:ro
       - operations-state:/ops
       - backup-work:/work
-      - ${DEPLOY_SECRET_BUNDLE_DIRECTORY:?Set DEPLOY_SECRET_BUNDLE_DIRECTORY}:/source/secrets:ro
-    secrets:
-      - restic_password
+      - ${DEPLOY_SECRET_DIRECTORY:-./secrets}:/source/secrets:ro
     read_only: true
     tmpfs:
       - /tmp
@@ -256,6 +430,7 @@ networks:
     internal: true
   backup-egress:
   edge:
+  telegram-egress:
   vpn-egress:
 
 volumes:
@@ -264,7 +439,3 @@ volumes:
   caddy-data:
   marzban-data:
   operations-state:
-
-secrets:
-  restic_password:
-    file: ${RESTIC_PASSWORD_FILE_PATH:?Set RESTIC_PASSWORD_FILE_PATH}
