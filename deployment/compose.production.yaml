@@ -33,6 +33,7 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN}
       TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: ${TELEGRAM_INIT_DATA_MAX_AGE_SECONDS:-300}
       VLESS_PORT: ${VLESS_PORT:-8443}
+      XRAY_LOG_LEVEL: ${XRAY_LOG_LEVEL:-warning}
     command:
       - python3
       - /run/astra/bootstrap/bootstrap.py
