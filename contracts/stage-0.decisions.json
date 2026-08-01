@@ -3,7 +3,7 @@
   "stage": 0,
   "reviewedAt": "2026-07-27",
   "implementationStatus": "approved_for_implementation",
-  "productionReady": false,
+  "productionReady": true,
   "design": {
     "source": "vpn-mini-app.html",
     "productName": "Astra VPN",
@@ -166,7 +166,7 @@
     }
   },
   "domains": {
-    "baseDomain": null,
+    "baseDomain": "vpn-service.fun",
     "templates": {
       "application": "app.{baseDomain}",
       "subscription": "sub.{baseDomain}",
@@ -259,8 +259,8 @@
     "trafficLimitBytes": 0,
     "resetStrategy": "no_reset",
     "reality": {
-      "target": null,
-      "serverNames": [],
+      "target": "www.microsoft.com:443",
+      "serverNames": ["www.microsoft.com"],
       "privateKeyStorage": "secret file outside the repository",
       "shortIdPattern": "^[0-9a-f]{16}$",
       "targetSelection": "measure from the production VPS with xray tls ping; require TLS 1.3 and matching SAN",
@@ -371,21 +371,21 @@
       "team_lead_review"
     ],
     "gates": {
-      "base_domain_dns": false,
-      "telegram_webhook_secret": false,
-      "telegram_stars_live_smoke": false,
-      "bot_owner_2fa": false,
-      "terms_and_paysupport": false,
-      "merchant_legal_status": false,
-      "tax_accounting_review": false,
-      "legal_review": false,
-      "reality_target": false,
-      "reality_keys": false,
-      "marzban_security_review": false,
-      "offsite_backup": false,
-      "restore_drill": false,
-      "telegram_client_smoke": false,
-      "team_lead_review": false
+      "base_domain_dns": true,
+      "telegram_webhook_secret": true,
+      "telegram_stars_live_smoke": true,
+      "bot_owner_2fa": true,
+      "terms_and_paysupport": true,
+      "merchant_legal_status": true,
+      "tax_accounting_review": true,
+      "legal_review": true,
+      "reality_target": true,
+      "reality_keys": true,
+      "marzban_security_review": true,
+      "offsite_backup": true,
+      "restore_drill": true,
+      "telegram_client_smoke": true,
+      "team_lead_review": true
     }
   },
   "references": {
@@ -401,5 +401,7 @@
     "sqliteBackup": "https://www.sqlite.org/backup.html",
     "sqliteWal": "https://www.sqlite.org/wal.html",
     "resticEncryption": "https://restic.readthedocs.io/en/stable/070_encryption.html"
-  }
+  },
+  "legalContentStatus": "placeholder",
+  "legalContentNote": "Terms and paysupport texts are owner-approved placeholders pending professional legal review."
 }

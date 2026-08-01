@@ -621,7 +621,13 @@
       bind:checked={termsAccepted}
       disabled={!purchasesEnabled || !isAuthenticated}
     />
-    <span>Подтверждаю условия покупки и разовый платёж в Telegram Stars</span>
+    <span>
+      Подтверждаю
+      <a class="terms-link" href={resolve("/terms")} target="_blank"
+        >условия покупки</a
+      >
+      и разовый платёж в Telegram Stars
+    </span>
   </label>
 </dialog>
 

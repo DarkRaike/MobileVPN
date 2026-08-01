@@ -114,6 +114,14 @@ const purchaseSchema = z.object({
 
 const supportStatusSchema = z.enum(["new", "in_progress", "resolved"]);
 
+const grantSchema = z.object({
+  durationDays: z.coerce.number().int().min(1).max(365),
+  targetTelegramUserId: z
+    .string()
+    .trim()
+    .regex(/^\d{1,20}$/u),
+});
+
 function getRequiredString(formData: FormData, name: string): string {
   const value = formData.get(name);
 
@@ -294,6 +302,16 @@ export function parseSupportStatus(formData: FormData): {
     id: parseEntityId(formData),
     status: supportStatusSchema.parse(getRequiredString(formData, "status")),
   };
+}
+
+export function parseGrantInput(formData: FormData): {
+  durationDays: number;
+  targetTelegramUserId: string;
+} {
+  return grantSchema.parse({
+    durationDays: getRequiredString(formData, "durationDays"),
+    targetTelegramUserId: getRequiredString(formData, "targetTelegramUserId"),
+  });
 }
 
 export function isValidationError(error: unknown): error is z.ZodError {

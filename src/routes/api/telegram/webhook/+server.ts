@@ -6,6 +6,10 @@ import { getRuntimeConfig } from "$lib/server/config/runtime";
 import { getDatabase } from "$lib/server/db/runtime";
 import { getTelegramStarsPayments } from "$lib/server/integrations/payments/runtime";
 import { verifyTelegramWebhookSecret } from "$lib/server/integrations/payments/telegram-stars";
+import {
+  parseBotCommand,
+  sendBotCommandReply,
+} from "$lib/server/integrations/telegram/commands";
 import { logEvent } from "$lib/server/observability/logger";
 import {
   parseTelegramPaymentUpdate,
@@ -106,7 +110,29 @@ export const POST: RequestHandler = async ({ getClientAddress, request }) => {
       return json({ ok: false }, { status: 413 });
     }
 
-    const update = parseTelegramPaymentUpdate(await readLimitedJson(request));
+    const body = await readLimitedJson(request);
+    const command = parseBotCommand(body);
+
+    // Bot commands carry no payment payload, so they are answered separately.
+    if (command && config.telegramBotToken && config.baseDomain) {
+      try {
+        await sendBotCommandReply(
+          config.telegramBotToken,
+          command,
+          config.baseDomain,
+        );
+      } catch (error) {
+        logEvent("error", {
+          errorCode: "TELEGRAM_COMMAND_REPLY_FAILED",
+          errorType: error instanceof Error ? error.name : "UnknownError",
+          route: "/api/telegram/webhook",
+        });
+      }
+
+      return json({ ok: true });
+    }
+
+    const update = parseTelegramPaymentUpdate(body);
     const { database } = await getDatabase();
     const paymentAdapter = getTelegramStarsPayments(config);
 
