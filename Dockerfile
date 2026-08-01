@@ -35,6 +35,10 @@ COPY --from=build /app/production-scripts/seed.mjs ./scripts/seed.mjs
 COPY --from=build /app/scripts/monitoring-worker.mjs ./scripts/monitoring-worker.mjs
 COPY --from=build /app/scripts/reconciliation-worker.mjs ./scripts/reconciliation-worker.mjs
 COPY --from=build /app/scripts/telegram-setup.mjs ./scripts/telegram-setup.mjs
+# Operator diagnostics run inside this image: both are documented as
+# `exec app node scripts/...` and are unusable if they are left out.
+COPY --from=build /app/scripts/vpn-diagnose.mjs ./scripts/vpn-diagnose.mjs
+COPY --from=build /app/scripts/xray-core-logs.mjs ./scripts/xray-core-logs.mjs
 RUN mkdir -p /data && chown -R node:node /app /data
 USER node
 EXPOSE 3000
