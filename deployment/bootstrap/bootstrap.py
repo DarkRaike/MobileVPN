@@ -66,7 +66,13 @@ def random_secret(byte_length: int) -> str:
 
 
 def read_environment(name: str, default: str = "") -> str:
-    return os.environ.get(name, default).strip()
+    """Read a stack variable, treating an empty value as absent.
+
+    Compose passes an optional variable as an empty string rather than leaving
+    it unset, so `os.environ.get(name, default)` never reaches its default and
+    every documented fallback here would be unreachable.
+    """
+    return os.environ.get(name, "").strip() or default
 
 
 def require_environment(name: str) -> str:
