@@ -15,7 +15,7 @@ function userResponse() {
     data_limit: 0,
     expire: 1_778_846_400,
     inbounds: { vless: ["VLESS_TCP_REALITY_V1"] },
-    proxies: { vless: { flow: "xtls-rprx-vision" } },
+    proxies: { vless: {} },
     status: "active",
     subscription_url: "https://sub.example.com/sub/fixture-token",
     used_traffic: 0,
@@ -57,7 +57,7 @@ describe("MarzbanAdapter", () => {
       data_limit_reset_strategy: "no_reset",
       expire: 1_778_803_200,
       inbounds: { vless: ["VLESS_TCP_REALITY_V1"] },
-      proxies: { vless: { flow: "xtls-rprx-vision" } },
+      proxies: { vless: {} },
       status: "active",
       username: "tg_111111111111111111111111",
     });

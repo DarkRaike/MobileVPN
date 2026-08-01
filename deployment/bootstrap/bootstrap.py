@@ -399,7 +399,7 @@ def main() -> int:
         REALITY_CLIENT_FILE,
         json.dumps(
             {
-                "flow": "xtls-rprx-vision",
+                "flow": "",
                 "inboundTag": inbound_tag,
                 "port": vless_port,
                 "publicKey": generated["REALITY_PUBLIC_KEY"],

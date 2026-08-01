@@ -120,7 +120,7 @@ test("the selected VLESS contract maps to Marzban's unlimited user model", () =>
   assert.equal(vless.port, 8443);
   assert.equal(vless.transport, "raw_tcp");
   assert.equal(vless.security, "reality");
-  assert.equal(vless.flow, "xtls-rprx-vision");
+  assert.equal(vless.flow, "");
   assert.equal(vless.trafficLimitBytes, 0);
   assert.equal(vless.resetStrategy, "no_reset");
 });

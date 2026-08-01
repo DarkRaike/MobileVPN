@@ -173,7 +173,13 @@ export class MarzbanAdapter implements Marzban {
       data_limit_reset_strategy: "no_reset",
       expire: expiresAtSeconds,
       inbounds: { vless: [this.inboundTag] },
-      proxies: { vless: { flow: "xtls-rprx-vision" } },
+      // Plain VLESS, no XTLS Vision. Vision splices traffic after the VLESS
+      // header, and its wire format differs between the pinned Xray 24.12.31
+      // and the cores current mobile clients are built on: REALITY
+      // authenticates, a few hundred bytes of handshake pass, and the tunnel
+      // then carries nothing. The failure looks like a healthy subscription
+      // that simply does not work, and no log records it.
+      proxies: { vless: {} },
       status: "active",
       ...(includeUsername ? { username: input.username } : {}),
     };

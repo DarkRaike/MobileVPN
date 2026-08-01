@@ -83,7 +83,7 @@ Caddy завершается на публичных портах 80/443. VLESS 
 - VLESS + RAW/TCP;
 - TCP 8443;
 - REALITY;
-- flow `xtls-rprx-vision`;
+- flow отсутствует (обычный VLESS);
 - `data_limit=0`, стратегия `no_reset`.
 
 Три устройства — soft policy. REALITY target измеряется с production VPS через `xray tls ping`; X25519 keys и случайный 16-символьный hex `shortId` не хранятся в Git.
