@@ -256,6 +256,19 @@ export const actions = {
       const context = await prepareAdminAction(event);
       const input = parseGrantInput(context.formData);
       const config = getRuntimeConfig();
+
+      // Without live operations the grant could never be provisioned, and the
+      // paid order would keep the paid_without_subscription signal critical.
+      if (
+        !config.liveOperationsEnabled ||
+        !config.subscriptionUrlEncryptionKey
+      ) {
+        throw new ApplicationError(
+          "LIVE_OPERATIONS_DISABLED",
+          "Выдача недоступна: включите ENABLE_LIVE_OPERATIONS.",
+        );
+      }
+
       const grant = await grantSubscription(context.database, {
         adminUserId: context.adminUserId,
         durationDays: input.durationDays,
@@ -264,17 +277,13 @@ export const actions = {
 
       // Provision straight away so the administrator sees the outcome; the
       // worker retries on its own schedule if Marzban is unavailable.
-      let provisioned = false;
-
-      if (config.liveOperationsEnabled && config.subscriptionUrlEncryptionKey) {
-        const result = await provisionOrder(
-          context.database,
-          getMarzban(config),
-          config.subscriptionUrlEncryptionKey,
-          grant.orderId,
-        );
-        provisioned = result.status === "applied";
-      }
+      const result = await provisionOrder(
+        context.database,
+        getMarzban(config),
+        config.subscriptionUrlEncryptionKey,
+        grant.orderId,
+      );
+      const provisioned = result.status === "applied";
 
       return {
         action,
