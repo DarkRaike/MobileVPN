@@ -81,3 +81,41 @@ describe("production image", () => {
     }
   });
 });
+
+describe("marzban services", () => {
+  const compose = read("deployment", "compose.production.yaml");
+
+  it("mount the configured Xray core wherever they execute it", () => {
+    // Importing the Marzban package runs the binary at XRAY_EXECUTABLE_PATH.
+    // The generated `marzban.env` and `marzban-init.env` both carry that
+    // variable, so a service that loads either and cannot see the file crashes
+    // on start with FileNotFoundError instead of falling back to the bundled
+    // core. `bootstrap` runs the binary directly to generate REALITY keys.
+    const services = [...compose.matchAll(/^ {2}([\w-]+):$/gmu)].map(
+      (match) => ({ name: match[1] ?? "", start: match.index ?? 0 }),
+    );
+
+    let checked = 0;
+
+    for (const [index, service] of services.entries()) {
+      const body = compose.slice(
+        service.start,
+        services[index + 1]?.start ?? compose.length,
+      );
+      const runsXray =
+        /secrets\/marzban(-init)?\.env/u.test(body) ||
+        body.includes("XRAY_EXECUTABLE_PATH");
+
+      if (!runsXray) {
+        continue;
+      }
+
+      checked += 1;
+      expect(body, `${service.name} runs the Xray binary`).toContain(
+        "./xray/bin:/opt/xray:ro",
+      );
+    }
+
+    expect(checked, "no service was recognised as running Xray").toBe(3);
+  });
+});
