@@ -25,8 +25,8 @@ def render(**overrides) -> dict:
     arguments = {
         "inbound_tag": "VLESS TCP REALITY",
         "vless_port": 8443,
-        "reality_dest": "www.nvidia.com:443",
-        "reality_server_names": ["www.nvidia.com"],
+        "reality_dest": "reverse-proxy:443",
+        "reality_server_names": ["app.example.org", "sub.example.org"],
         "private_key": "fixture-private-key",
         "public_key": "fixture-public-key",
         # Deliberately not a value any deployment uses: a real short ID is
@@ -56,8 +56,10 @@ class XrayConfigRenderTests(unittest.TestCase):
         self.assertEqual(inbound["protocol"], "vless")
         self.assertEqual(inbound["settings"]["decryption"], "none")
         self.assertEqual(inbound["streamSettings"]["security"], "reality")
-        self.assertEqual(reality["dest"], "www.nvidia.com:443")
-        self.assertEqual(reality["serverNames"], ["www.nvidia.com"])
+        self.assertEqual(reality["dest"], "reverse-proxy:443")
+        self.assertEqual(
+            reality["serverNames"], ["app.example.org", "sub.example.org"]
+        )
         self.assertEqual(reality["privateKey"], "fixture-private-key")
         # Marzban builds client links from this value instead of re-deriving it
         # with `xray x25519 -i`, which rejects the inbound when it cannot parse.

@@ -16,7 +16,7 @@
 Ни один внутренний сигнал не подтверждает, что клиент может подключиться:
 сигналы ниже считают строки в базе и не проверяют доступность `vpn.<baseDomain>`
 снаружи. Стек при неисправном endpoint остаётся полностью «здоровым», поэтому
-второй внешний uptime-check обязателен — TCP-проба `vpn.<baseDomain>:<VLESS_PORT>`
+второй внешний uptime-check обязателен — TCP-проба `vpn.<baseDomain>:443`
 каждые 60 секунд из тех же регионов.
 
 Проба должна идти именно на DNS-имя, а не на IP: адрес подключения задаётся
@@ -24,7 +24,7 @@
 остановленный Xray. Проверка вручную:
 
 ```bash
-openssl s_client -connect vpn.<domain>:8443 -servername <первый serverName> </dev/null 2>/dev/null | openssl x509 -noout -subject
+openssl s_client -connect vpn.<domain>:443 -servername <первый serverName> </dev/null 2>/dev/null | openssl x509 -noout -subject
 ```
 
 Подлинный subject маскировочного сайта означает, что DNS, порт и REALITY живы.

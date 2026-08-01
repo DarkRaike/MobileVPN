@@ -57,7 +57,7 @@ VPN выдаётся только после серверного `message.succe
 | `sub.{baseDomain}` | только Marzban subscription endpoint `/sub/*` |
 | `vpn.{baseDomain}` | VLESS/REALITY endpoint                        |
 
-Caddy завершается на публичных портах 80/443. VLESS слушает отдельный TCP 8443. SSH 22 доступен только по allowlist оператора. Порты приложения 3000, Marzban 8000 и Caddy admin 2019 находятся только во внутренней сети.
+Xray слушает публичный 443 и отдаёт неаутентифицированные соединения Caddy, который держит HTTPS на внутреннем 8443. Публично открыты только 80 и 443. SSH 22 доступен только по allowlist оператора. Порты приложения 3000, Marzban 8000 и Caddy admin 2019 находятся только во внутренней сети.
 
 На `sub.{baseDomain}` запрещены `/api/*`, `/dashboard/*`, `/docs` и `/openapi.json`; access log отключён. Публичного admin-домена нет, Marzban admin доступен только через SSH tunnel.
 
@@ -81,7 +81,7 @@ Caddy завершается на публичных портах 80/443. VLESS 
 
 - inbound `VLESS TCP REALITY`;
 - VLESS + RAW/TCP;
-- TCP 8443;
+- TCP 443;
 - REALITY;
 - flow отсутствует (обычный VLESS);
 - `data_limit=0`, стратегия `no_reset`.

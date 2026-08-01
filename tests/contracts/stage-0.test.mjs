@@ -85,7 +85,7 @@ test("network topology exposes only the selected public entry points", () => {
   assert.equal(templates.reality, "vpn.{baseDomain}");
   assert.equal(domains.publicAdminDomain, null);
   assert.equal(domains.marzbanAdminAccess, "SSH tunnel only");
-  assert.deepEqual(reverseProxy.publicPorts, [80, 443, 8443]);
+  assert.deepEqual(reverseProxy.publicPorts, [80, 443]);
   assert.equal(reverseProxy.subscriptionAccessLogs, false);
   assert.deepEqual(reverseProxy.subscriptionHostDeniedPaths, [
     "/api/*",
