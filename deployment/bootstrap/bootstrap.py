@@ -35,6 +35,11 @@ REALITY_CLIENT_FILE = SECRETS_DIRECTORY / "reality-client.json"
 CONTAINER_SECRETS_DIRECTORY = "/run/astra/secrets"
 MARZBAN_SOCKET_PATH = "/run/marzban/uvicorn.sock"
 
+# The core shipped in the pinned Marzban image, and where the compose file
+# mounts a newer one when the operator supplies it.
+BUNDLED_XRAY_EXECUTABLE = "/usr/local/bin/xray"
+UPGRADED_XRAY_EXECUTABLE = "/opt/xray/xray"
+
 # Xray holds the public 443 and relays everything it does not authenticate to
 # Caddy, which keeps its own 443 inside the container and publishes no port.
 REVERSE_PROXY_HOST = "reverse-proxy"
@@ -132,7 +137,7 @@ def load_generated_secrets() -> dict[str, str]:
 
 def generate_reality_key_pair() -> tuple[str, str]:
     """Generate an X25519 key pair with the Xray binary bundled in the image."""
-    executable = os.environ.get("XRAY_EXECUTABLE_PATH", "/usr/local/bin/xray")
+    executable = read_environment("XRAY_EXECUTABLE_PATH", BUNDLED_XRAY_EXECUTABLE)
 
     try:
         completed = subprocess.run(
@@ -375,6 +380,12 @@ def main() -> int:
     application_uid = positive_integer_environment("APP_UID", 1000)
     application_gid = positive_integer_environment("APP_GID", 1000)
     xray_log_level = read_environment("XRAY_LOG_LEVEL", "warning").lower()
+    xray_executable_path = read_environment(
+        "XRAY_EXECUTABLE_PATH", BUNDLED_XRAY_EXECUTABLE
+    )
+
+    if not xray_executable_path.startswith("/"):
+        raise ConfigurationError("XRAY_EXECUTABLE_PATH must be an absolute path")
 
     if xray_log_level not in XRAY_LOG_LEVELS:
         raise ConfigurationError(
@@ -493,6 +504,11 @@ def main() -> int:
         "DOCS": "False",
         "SQLALCHEMY_DATABASE_URL": "sqlite:////var/lib/marzban/db.sqlite3",
         "UVICORN_UDS": MARZBAN_SOCKET_PATH,
+        # The core the image was built with predates post-quantum key exchange in
+        # REALITY, so a current client's ClientHello never authenticates against
+        # it. Marzban runs whatever binary this points at, which is how a newer
+        # core reaches the deployment without unpinning the image.
+        "XRAY_EXECUTABLE_PATH": xray_executable_path,
         "XRAY_JSON": f"{CONTAINER_SECRETS_DIRECTORY}/xray_config.json",
         "XRAY_SUBSCRIPTION_PATH": "sub",
         "XRAY_SUBSCRIPTION_URL_PREFIX": f"https://sub.{base_domain}",
