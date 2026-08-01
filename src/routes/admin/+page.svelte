@@ -91,6 +91,17 @@
       {/each}
     </nav>
 
+    {#if !data.liveOperationsEnabled}
+      <div
+        class="feedback-error mb-5 rounded-[18px] px-4 py-3 text-sm"
+        role="alert"
+      >
+        Выдача доступа выключена: <code>ENABLE_LIVE_OPERATIONS=false</code>.
+        Новые выдачи отклоняются, а уже поставленные в очередь заказы будут
+        обработаны сразу после включения.
+      </div>
+    {/if}
+
     {#if feedback?.message}
       <div
         class:feedback-error={!feedback.ok}
@@ -116,6 +127,7 @@
         <AccessManager
           adminTelegramUserId={data.admin.telegramUserId}
           grants={data.grants}
+          liveOperationsEnabled={data.liveOperationsEnabled}
         />
       {:else if activeSection === "promos"}
         <PromoManager

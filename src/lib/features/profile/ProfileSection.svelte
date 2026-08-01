@@ -215,8 +215,7 @@
         {sessionExpiry ? `До ${sessionExpiry} UTC` : "Сессия защищена"}
       </p>
     </div>
-    <span class="h-[9px] w-[9px] shrink-0 rounded-full bg-[color:var(--accent)]"
-    ></span>
+    <span class="session-dot h-[9px] w-[9px] shrink-0 rounded-full"></span>
   </div>
 
   {#if isAdmin}

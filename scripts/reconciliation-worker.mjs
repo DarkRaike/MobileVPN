@@ -19,8 +19,34 @@ if (
   throw new Error("RECONCILIATION_INTERVAL_MILLISECONDS must be at least 5000");
 }
 
+const DISABLED_NOTICE_INTERVAL_MILLISECONDS = 15 * 60 * 1_000;
+let disabledNoticeAt = 0;
+
+// A silent worker is indistinguishable from a working one, so an operator sees
+// grants queue up with no explanation. Report the reason on a slow cadence.
+function reportDisabled() {
+  const now = Date.now();
+
+  if (now - disabledNoticeAt < DISABLED_NOTICE_INTERVAL_MILLISECONDS) {
+    return;
+  }
+
+  disabledNoticeAt = now;
+  console.warn(
+    JSON.stringify({
+      errorCode: "RECONCILIATION_DISABLED",
+      level: "warn",
+      reason: liveOperationsEnabled
+        ? "INTERNAL_JOB_SECRET is missing"
+        : "ENABLE_LIVE_OPERATIONS is false",
+      timestamp: new Date(now).toISOString(),
+    }),
+  );
+}
+
 async function runReconciliation() {
   if (!liveOperationsEnabled || !internalJobSecret) {
+    reportDisabled();
     setTimeout(runReconciliation, intervalMilliseconds);
     return;
   }

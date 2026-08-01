@@ -15,9 +15,11 @@
   let {
     adminTelegramUserId,
     grants,
+    liveOperationsEnabled,
   }: {
     adminTelegramUserId: string;
     grants: Grant[];
+    liveOperationsEnabled: boolean;
   } = $props();
 
   let submitting = $state(false);
@@ -101,15 +103,20 @@
       />
     </label>
     <div class="flex flex-wrap items-center gap-2 sm:col-span-2">
-      <button class="admin-primary" type="submit" disabled={submitting}>
+      <button
+        class="admin-primary"
+        type="submit"
+        disabled={submitting || !liveOperationsEnabled}
+      >
         {submitting ? "Выдаём…" : "Выдать доступ"}
       </button>
       <button class="admin-secondary" type="button" onclick={fillSelf}>
         Себе
       </button>
       <p class="m-0 text-xs text-[color:var(--color-muted)]">
-        Оплата не создаётся. Срок продлевает текущую подписку, максимум 365
-        дней.
+        {liveOperationsEnabled
+          ? "Оплата не создаётся. Срок продлевает текущую подписку, максимум 365 дней."
+          : "Выдача выключена: ENABLE_LIVE_OPERATIONS=false."}
       </p>
     </div>
   </form>
