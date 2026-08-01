@@ -41,4 +41,19 @@ describe("order and subscription rules", () => {
       canExtendSubscription(new Date("2027-07-20T00:00:00.000Z"), 30, now),
     ).toBe(false);
   });
+
+  it("rounds the expiry up to the whole second Marzban can store", () => {
+    const result = calculateSubscriptionExpiry({
+      durationDays: 30,
+      paidAt: new Date("2026-07-27T00:00:00.456Z"),
+    });
+
+    expect(result.toISOString()).toBe("2026-08-26T00:00:01.000Z");
+  });
+
+  it("still allows a full 365 day order paid at a sub-second instant", () => {
+    const paidAt = new Date("2026-07-27T00:00:00.456Z");
+
+    expect(canExtendSubscription(null, 365, paidAt)).toBe(true);
+  });
 });

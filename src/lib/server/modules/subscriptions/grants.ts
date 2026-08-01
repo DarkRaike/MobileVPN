@@ -116,8 +116,8 @@ export async function listGrantsForAdmin(database: Database, limit = 50) {
       createdAt: orders.createdAt,
       id: orders.id,
       planName: orders.planNameSnapshot,
+      provisioningErrorCode: orders.provisioningErrorCode,
       provisioningStatus: orders.provisioningStatus,
-      status: orders.status,
       telegramUserId: users.telegramUserId,
     })
     .from(orders)

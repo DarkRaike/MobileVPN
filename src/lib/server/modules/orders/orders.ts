@@ -502,6 +502,7 @@ export async function listOrdersForAdmin(database: Database) {
       provisioningAttempts: orders.provisioningAttempts,
       provisioningErrorCode: orders.provisioningErrorCode,
       provisioningStatus: orders.provisioningStatus,
+      source: orders.source,
       status: orders.status,
       telegramUserId: users.telegramUserId,
       totalStars: orders.totalStars,

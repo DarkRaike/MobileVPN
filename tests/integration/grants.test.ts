@@ -43,26 +43,28 @@ const NOW = new Date("2026-07-27T12:00:00.000Z");
 const ADMIN_TELEGRAM_ID = "900000001";
 const MEMBER_TELEGRAM_ID = "900000002";
 
+// Marzban stores `expire` as whole UNIX seconds and echoes back the truncated
+// value, so the stub has to lose the milliseconds the real provider loses.
+function marzbanUser(input: MarzbanUserInput) {
+  return {
+    dataLimit: 0,
+    expiresAt: new Date(Math.floor(input.expiresAt.getTime() / 1_000) * 1_000),
+    inbounds: { vless: ["VLESS_TCP_REALITY_V1"] },
+    status: "active" as const,
+    subscriptionUrl: "https://sub.example.com/sub/secret-token",
+    usedTrafficBytes: 0,
+    username: input.username,
+  };
+}
+
 class MarzbanStub implements Marzban {
-  readonly createUser = vi.fn(async (input: MarzbanUserInput) => ({
-    dataLimit: 0,
-    expiresAt: input.expiresAt,
-    inbounds: { vless: ["VLESS_TCP_REALITY_V1"] },
-    status: "active" as const,
-    subscriptionUrl: "https://sub.example.com/sub/secret-token",
-    usedTrafficBytes: 0,
-    username: input.username,
-  }));
+  readonly createUser = vi.fn(async (input: MarzbanUserInput) =>
+    marzbanUser(input),
+  );
   readonly getUser = vi.fn<Marzban["getUser"]>(async () => null);
-  readonly updateUser = vi.fn(async (input: MarzbanUserInput) => ({
-    dataLimit: 0,
-    expiresAt: input.expiresAt,
-    inbounds: { vless: ["VLESS_TCP_REALITY_V1"] },
-    status: "active" as const,
-    subscriptionUrl: "https://sub.example.com/sub/secret-token",
-    usedTrafficBytes: 0,
-    username: input.username,
-  }));
+  readonly updateUser = vi.fn(async (input: MarzbanUserInput) =>
+    marzbanUser(input),
+  );
 }
 
 describe("administrator subscription grants", () => {
@@ -184,6 +186,90 @@ describe("administrator subscription grants", () => {
     expect(subscription.expiresAt).toEqual(
       new Date("2026-08-26T12:00:00.000Z"),
     );
+  });
+
+  it("provisions a grant issued at a sub-second instant", async () => {
+    const marzban = new MarzbanStub();
+    const issuedAt = new Date("2026-07-27T12:00:00.456Z");
+    const grant = await grantSubscription(
+      context.database,
+      {
+        adminUserId,
+        durationDays: 30,
+        targetTelegramUserId: MEMBER_TELEGRAM_ID,
+      },
+      issuedAt,
+    );
+
+    const result = await provisionOrder(
+      context.database,
+      marzban,
+      encryptionKey,
+      grant.orderId,
+      issuedAt,
+    );
+
+    const [order] = await context.database
+      .select()
+      .from(orders)
+      .where(eq(orders.id, grant.orderId));
+    const [subscription] = await context.database
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.userId, memberUserId));
+    assert(order);
+    assert(subscription);
+
+    expect(result.status).toBe("applied");
+    expect(order.status).toBe("active");
+    expect(order.provisioningErrorCode).toBeNull();
+    expect(subscription.expiresAt).toEqual(
+      new Date("2026-08-26T12:00:01.000Z"),
+    );
+  });
+
+  it("recovers a grant whose stored target still carries milliseconds", async () => {
+    const marzban = new MarzbanStub();
+    const issuedAt = new Date("2026-07-27T12:00:00.000Z");
+    const grant = await grantSubscription(
+      context.database,
+      {
+        adminUserId,
+        durationDays: 30,
+        targetTelegramUserId: MEMBER_TELEGRAM_ID,
+      },
+      issuedAt,
+    );
+
+    // Reproduce a row written before the expiry precision was fixed: a failed
+    // attempt whose persisted target can never be confirmed by Marzban.
+    await context.database
+      .update(orders)
+      .set({
+        provisioningAttempts: 1,
+        provisioningErrorCode: "MARZBAN_STATE_MISMATCH",
+        provisioningStatus: "failed",
+        status: "provisioning_failed",
+      })
+      .where(eq(orders.id, grant.orderId));
+    await context.database
+      .update(orderProvisioning)
+      .set({
+        lastErrorCode: "MARZBAN_STATE_MISMATCH",
+        state: "failed",
+        targetExpiresAt: new Date("2026-08-26T12:00:00.456Z"),
+      })
+      .where(eq(orderProvisioning.orderId, grant.orderId));
+
+    const result = await provisionOrder(
+      context.database,
+      marzban,
+      encryptionKey,
+      grant.orderId,
+      issuedAt,
+    );
+
+    expect(result.status).toBe("applied");
   });
 
   it("extends an existing subscription instead of restarting it", async () => {

@@ -68,6 +68,7 @@ export interface AdminOrder {
   provisioningErrorCode: string | null;
   provisioningStatus:
     "failed" | "not_started" | "pending" | "processing" | "succeeded";
+  source: "admin_grant" | "purchase";
   status:
     | "active"
     | "cancelled"
