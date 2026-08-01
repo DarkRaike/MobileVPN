@@ -70,11 +70,29 @@ class XrayConfigRenderTests(unittest.TestCase):
             "PLACEHOLDER", json.dumps(config), "a placeholder survived rendering"
         )
 
-    def test_routing_rules_follow_the_inbound_tag(self) -> None:
-        config = render(inbound_tag="VLESS_TCP_REALITY_V2")
+    def test_the_data_path_reaches_the_internet(self) -> None:
+        # Sniffing informs routing without replacing the destination, and the
+        # rules end in a catch-all rather than relying on the first outbound.
+        config = render()
+        inbound = config["inbounds"][0]
+        outbound_tags = [outbound["tag"] for outbound in config["outbounds"]]
 
-        for rule in config["routing"]["rules"]:
-            self.assertEqual(rule["inboundTag"], ["VLESS_TCP_REALITY_V2"])
+        self.assertTrue(inbound["sniffing"]["routeOnly"])
+        self.assertEqual(
+            config["outbounds"][0]["settings"]["domainStrategy"], "UseIPv4v6"
+        )
+        self.assertEqual(config["routing"]["domainStrategy"], "IPIfNonMatch")
+        self.assertEqual(config["routing"]["rules"][-1]["outboundTag"], "DIRECT")
+        self.assertIn("BLOCK", outbound_tags)
+
+    def test_private_addresses_stay_blocked(self) -> None:
+        blocked = [
+            rule
+            for rule in render()["routing"]["rules"]
+            if rule["outboundTag"] == "BLOCK"
+        ]
+
+        self.assertIn(["geoip:private"], [rule.get("ip") for rule in blocked])
 
     def test_reality_diagnostics_stay_off_unless_requested(self) -> None:
         reality = render()["inbounds"][0]["streamSettings"]["realitySettings"]

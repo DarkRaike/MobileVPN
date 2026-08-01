@@ -2,7 +2,8 @@
   "log": {
     "access": "none",
     "error": "",
-    "loglevel": "warning"
+    "loglevel": "warning",
+    "dnsLog": false
   },
   "inbounds": [
     {
@@ -24,7 +25,8 @@
           "serverNames": ["PLACEHOLDER"],
           "privateKey": "PLACEHOLDER",
           "publicKey": "PLACEHOLDER",
-          "shortIds": ["PLACEHOLDER"]
+          "shortIds": ["PLACEHOLDER"],
+          "maxTimeDiff": 0
         }
       },
       "sniffing": {
@@ -37,20 +39,34 @@
   "outbounds": [
     {
       "tag": "DIRECT",
-      "protocol": "freedom"
+      "protocol": "freedom",
+      "settings": {
+        "domainStrategy": "UseIPv4v6"
+      }
     },
     {
       "tag": "BLOCK",
-      "protocol": "blackhole"
+      "protocol": "blackhole",
+      "settings": {}
     }
   ],
   "routing": {
+    "domainStrategy": "IPIfNonMatch",
     "rules": [
       {
         "type": "field",
-        "inboundTag": ["VLESS_TCP_REALITY_V1"],
         "ip": ["geoip:private"],
         "outboundTag": "BLOCK"
+      },
+      {
+        "type": "field",
+        "protocol": ["bittorrent"],
+        "outboundTag": "BLOCK"
+      },
+      {
+        "type": "field",
+        "network": "tcp,udp",
+        "outboundTag": "DIRECT"
       }
     ]
   }
