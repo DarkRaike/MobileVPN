@@ -25,8 +25,8 @@ def render(**overrides) -> dict:
     arguments = {
         "inbound_tag": "VLESS_TCP_REALITY_V1",
         "vless_port": 8443,
-        "reality_dest": "www.microsoft.com:443",
-        "reality_server_names": ["www.microsoft.com"],
+        "reality_dest": "www.swift.com:443",
+        "reality_server_names": ["www.swift.com"],
         "private_key": "fixture-private-key",
         "short_id": "b16bc7a153e6f1b7",
     }
@@ -53,8 +53,8 @@ class XrayConfigRenderTests(unittest.TestCase):
         self.assertEqual(inbound["protocol"], "vless")
         self.assertEqual(inbound["settings"]["decryption"], "none")
         self.assertEqual(inbound["streamSettings"]["security"], "reality")
-        self.assertEqual(reality["dest"], "www.microsoft.com:443")
-        self.assertEqual(reality["serverNames"], ["www.microsoft.com"])
+        self.assertEqual(reality["dest"], "www.swift.com:443")
+        self.assertEqual(reality["serverNames"], ["www.swift.com"])
         self.assertEqual(reality["privateKey"], "fixture-private-key")
         self.assertEqual(reality["shortIds"], ["b16bc7a153e6f1b7"])
         self.assertNotIn(

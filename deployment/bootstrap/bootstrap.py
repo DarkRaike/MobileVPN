@@ -307,7 +307,7 @@ def main() -> int:
     if vless_port > 65535:
         raise ConfigurationError("VLESS_PORT must be a valid TCP port")
 
-    reality_dest = read_environment("REALITY_DEST", "www.microsoft.com:443")
+    reality_dest = read_environment("REALITY_DEST", "www.swift.com:443")
     reality_host, _ = parse_reality_destination(reality_dest)
     reality_server_names = [
         name.strip()
