@@ -42,10 +42,12 @@ import { decryptSubscriptionUrl } from "../../src/lib/server/security/subscripti
 const NOW = new Date("2026-07-27T12:00:00.000Z");
 const TARGET_EXPIRY = new Date("2026-08-26T12:00:00.000Z");
 
+// Marzban stores `expire` as whole UNIX seconds and echoes back the truncated
+// value, so the stub has to lose the milliseconds the real provider loses.
 function marzbanUser(input: MarzbanUserInput): MarzbanUser {
   return {
     dataLimit: 0,
-    expiresAt: input.expiresAt,
+    expiresAt: new Date(Math.floor(input.expiresAt.getTime() / 1_000) * 1_000),
     inbounds: { vless: ["VLESS_TCP_REALITY_V1"] },
     status: "active",
     subscriptionUrl: "https://sub.example.com/sub/secret-token",

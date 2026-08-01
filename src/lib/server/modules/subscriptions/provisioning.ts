@@ -22,7 +22,11 @@ import {
   payments,
   subscriptions,
 } from "../../db/schema";
-import { calculateSubscriptionExpiry } from "../../domain/subscriptions";
+import {
+  alignExpiryToWholeSecond,
+  calculateSubscriptionExpiry,
+  MILLISECONDS_PER_SECOND,
+} from "../../domain/subscriptions";
 import type { Marzban, MarzbanUser } from "../../integrations/marzban/marzban";
 import { logEvent } from "../../observability/logger";
 import { encryptSubscriptionUrl } from "../../security/subscription-url";
@@ -219,10 +223,15 @@ function isProvisionedAtTarget(
   user: MarzbanUser,
   targetExpiresAt: Date,
 ): boolean {
+  if (user.status !== "active" || user.expiresAt === null) {
+    return false;
+  }
+
+  // Marzban reports `expire` in whole seconds, so the comparison has to run at
+  // the precision the provider is able to confirm.
   return (
-    user.status === "active" &&
-    user.expiresAt !== null &&
-    user.expiresAt.getTime() >= targetExpiresAt.getTime()
+    Math.floor(user.expiresAt.getTime() / MILLISECONDS_PER_SECOND) >=
+    Math.floor(targetExpiresAt.getTime() / MILLISECONDS_PER_SECOND)
   );
 }
 
@@ -278,7 +287,9 @@ export async function provisionOrder(
 
   try {
     const actualUser = await marzban.getUser(claim.marzbanUsername);
-    const targetExpiresAt =
+    // A target stored before the expiry precision was fixed still carries
+    // milliseconds, so aligning it here lets a stuck order recover on retry.
+    const targetExpiresAt = alignExpiryToWholeSecond(
       claim.attemptsBeforeClaim === 0
         ? calculateSubscriptionExpiry({
             actualExpiresAt: actualUser?.expiresAt,
@@ -286,7 +297,8 @@ export async function provisionOrder(
             localExpiresAt: claim.localExpiresAt,
             paidAt: claim.paidAt,
           })
-        : claim.targetExpiresAt;
+        : claim.targetExpiresAt,
+    );
 
     await database
       .update(orderProvisioning)
@@ -316,11 +328,13 @@ export async function provisionOrder(
       );
     }
 
-    const finalExpiresAt = new Date(
-      Math.max(
-        targetExpiresAt.getTime(),
-        provisionedUser.expiresAt?.getTime() ?? 0,
-        claim.localExpiresAt?.getTime() ?? 0,
+    const finalExpiresAt = alignExpiryToWholeSecond(
+      new Date(
+        Math.max(
+          targetExpiresAt.getTime(),
+          provisionedUser.expiresAt?.getTime() ?? 0,
+          claim.localExpiresAt?.getTime() ?? 0,
+        ),
       ),
     );
     const encryptedSubscriptionUrl = encryptSubscriptionUrl(
