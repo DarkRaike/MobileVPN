@@ -173,8 +173,8 @@ test("production approval requires every gate and concrete deployment values", (
   domains.baseDomain = "astra-vpn.ru";
   const vless = requireRecord(approved.vless, "VLESS");
   const reality = requireRecord(vless.reality, "REALITY");
-  reality.target = "www.microsoft.com:443";
-  reality.serverNames = ["www.microsoft.com"];
+  reality.target = "www.swift.com:443";
+  reality.serverNames = ["www.swift.com"];
 
   assert.equal(assertProductionReady(approved), true);
 
