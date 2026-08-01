@@ -13,7 +13,7 @@ import {
 import { constantTimeEquals } from "$lib/server/security/constant-time";
 import {
   consumeRateLimit,
-  resolveInternalClientKey,
+  resolveClientKey,
 } from "$lib/server/security/rate-limit";
 
 import type { RequestHandler } from "./$types";
@@ -42,7 +42,7 @@ export const POST: RequestHandler = async ({ getClientAddress, request }) => {
   }
 
   const rateLimit = consumeRateLimit(
-    `reconciliation-job:${resolveInternalClientKey(getClientAddress)}`,
+    `reconciliation-job:${resolveClientKey(getClientAddress)}`,
     JOB_RATE_LIMIT,
     JOB_RATE_LIMIT_WINDOW_SECONDS,
   );

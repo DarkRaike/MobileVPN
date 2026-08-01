@@ -83,14 +83,13 @@ export class InMemoryRateLimiter {
 const rateLimiter = new InMemoryRateLimiter();
 
 /**
- * Internal services call the application directly instead of going through the
- * reverse proxy, so the address header the node adapter requires is absent and
- * `getClientAddress` throws. Those callers are already authenticated by a shared
- * secret, so they share a single bucket.
+ * `getClientAddress` throws when the address header the node adapter requires is
+ * absent, which happens for every caller that reaches the application directly
+ * instead of through the reverse proxy. Those callers are already authenticated
+ * by a shared secret or a webhook secret, so they share a single bucket rather
+ * than failing the request before the secret is even checked.
  */
-export function resolveInternalClientKey(
-  getClientAddress: () => string,
-): string {
+export function resolveClientKey(getClientAddress: () => string): string {
   try {
     return getClientAddress();
   } catch {

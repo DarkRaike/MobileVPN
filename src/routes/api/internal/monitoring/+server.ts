@@ -6,7 +6,7 @@ import { collectMonitoringSnapshot } from "$lib/server/observability/monitoring"
 import { constantTimeEquals } from "$lib/server/security/constant-time";
 import {
   consumeRateLimit,
-  resolveInternalClientKey,
+  resolveClientKey,
 } from "$lib/server/security/rate-limit";
 
 const MONITORING_RATE_LIMIT = 60;
@@ -26,7 +26,7 @@ export const GET: RequestHandler = async ({ getClientAddress, request }) => {
   }
 
   const rateLimit = consumeRateLimit(
-    `monitoring:${resolveInternalClientKey(getClientAddress)}`,
+    `monitoring:${resolveClientKey(getClientAddress)}`,
     MONITORING_RATE_LIMIT,
     MONITORING_RATE_LIMIT_WINDOW_SECONDS,
   );
