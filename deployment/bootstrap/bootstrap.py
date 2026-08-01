@@ -35,6 +35,11 @@ REALITY_CLIENT_FILE = SECRETS_DIRECTORY / "reality-client.json"
 CONTAINER_SECRETS_DIRECTORY = "/run/astra/secrets"
 MARZBAN_SOCKET_PATH = "/run/marzban/uvicorn.sock"
 
+# Xray holds the public 443 and relays everything it does not authenticate to
+# Caddy, which keeps its own 443 inside the container and publishes no port.
+REVERSE_PROXY_HOST = "reverse-proxy"
+REVERSE_PROXY_TLS_ENDPOINT = f"{REVERSE_PROXY_HOST}:443"
+
 # Label of the Marzban proxy host this deployment owns. It is also how
 # `marzban_host_sync.py` recognises its own row on the next start.
 MARZBAN_HOST_REMARK = "Astra VPN"
@@ -328,7 +333,7 @@ def main() -> int:
         )
 
     inbound_tag = read_environment("MARZBAN_VLESS_INBOUND_TAG", "VLESS TCP REALITY")
-    vless_port = positive_integer_environment("VLESS_PORT", 8443)
+    vless_port = positive_integer_environment("VLESS_PORT", 443)
 
     if vless_port > 65535:
         raise ConfigurationError("VLESS_PORT must be a valid TCP port")
@@ -346,11 +351,21 @@ def main() -> int:
             "REALITY_ENDPOINT_HOST must be a domain or an IPv4 address"
         )
 
-    reality_dest = read_environment("REALITY_DEST", "gateway.icloud.com:443")
+    reality_dest = read_environment("REALITY_DEST", REVERSE_PROXY_TLS_ENDPOINT)
     reality_host, _ = parse_reality_destination(reality_dest)
+    # Serving REALITY on the public 443 means the masquerade is this deployment's
+    # own reverse proxy, so the names clients present are the hosts it already
+    # holds certificates for. An external target keeps its own name instead.
+    default_server_names = (
+        f"app.{base_domain},sub.{base_domain}"
+        if reality_host == REVERSE_PROXY_HOST
+        else reality_host
+    )
     reality_server_names = [
         name.strip()
-        for name in read_environment("REALITY_SERVER_NAMES", reality_host).split(",")
+        for name in read_environment(
+            "REALITY_SERVER_NAMES", default_server_names
+        ).split(",")
         if name.strip()
     ]
 

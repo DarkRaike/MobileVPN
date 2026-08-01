@@ -15,7 +15,7 @@ adapter, SQLite, Docker boundaries, logs, backup и release process.
 | Requests          | Body limits, runtime validation, CSRF/origin checks, stable errors      |
 | Logging           | JSON, request ID, recursive secret/Subscription URL redaction           |
 | Backup            | Online Backup API, integrity/FK/SHA checks, encrypted offsite design    |
-| Network           | Public only 80/443/8443; Marzban API and workers on private network     |
+| Network           | Public only 80/443; Marzban API and workers on private network          |
 | Supply chain      | Exact npm lock, pinned Caddy/Marzban/restic images, immutable app gate  |
 
 Backup-контейнер — единственное обоснованное исключение из non-root: ему нужно

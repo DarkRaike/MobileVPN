@@ -32,7 +32,7 @@ REALITY и Telegram Mini App на одном сервере, и что оста�
 | `bootstrap`        | one-shot: генерирует секреты, REALITY-ключи, `xray_config.json` и env-файлы |
 | `marzban-init`     | one-shot: `alembic upgrade head`, пароль sudo-админа и адрес proxy host     |
 | `app-init`         | one-shot: Drizzle migrations и идемпотентный seed тарифов 7/30/90           |
-| `marzban`          | Marzban на Unix-сокете и Xray REALITY на `8443/tcp`                         |
+| `marzban`          | Marzban на Unix-сокете и Xray REALITY на публичном `443/tcp`                |
 | `app`              | SvelteKit Node server на внутреннем `3000`                                  |
 | `worker`           | reconciliation и provisioning retry                                         |
 | `monitoring`       | внутренние сигналы и Telegram alerting                                      |
@@ -146,7 +146,7 @@ HTTP-01 challenge и без корректного DNS получит отказ
 ## 4. Запуск на VPS
 
 1. Установить Docker Engine с Compose plugin и открыть в firewall только
-   `80/tcp`, `443/tcp`, `443/udp`, `8443/tcp` и SSH по operator IP allowlist.
+   `80/tcp`, `443/tcp` и SSH по operator IP allowlist.
 2. Склонировать репозиторий и подготовить конфигурацию:
 
    ```bash

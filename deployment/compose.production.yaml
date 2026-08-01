@@ -26,7 +26,7 @@ services:
       MARZBAN_VLESS_INBOUND_TAG: "${MARZBAN_VLESS_INBOUND_TAG:-VLESS TCP REALITY}"
       MONITORING_INTERVAL_MILLISECONDS: ${MONITORING_INTERVAL_MILLISECONDS:-60000}
       PYTHONDONTWRITEBYTECODE: "1"
-      REALITY_DEST: ${REALITY_DEST:-gateway.icloud.com:443}
+      REALITY_DEST: ${REALITY_DEST:-reverse-proxy:443}
       REALITY_ENDPOINT_HOST: ${REALITY_ENDPOINT_HOST:-}
       REALITY_SERVER_NAMES: ${REALITY_SERVER_NAMES:-}
       REALITY_SHOW: ${REALITY_SHOW:-false}
@@ -34,7 +34,7 @@ services:
       TELEGRAM_ADMIN_USER_ID: ${TELEGRAM_ADMIN_USER_ID:?Set TELEGRAM_ADMIN_USER_ID}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN}
       TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: ${TELEGRAM_INIT_DATA_MAX_AGE_SECONDS:-300}
-      VLESS_PORT: ${VLESS_PORT:-8443}
+      VLESS_PORT: ${VLESS_PORT:-443}
       XRAY_LOG_LEVEL: ${XRAY_LOG_LEVEL:-warning}
     command:
       - python3
@@ -132,10 +132,11 @@ services:
       ACME_CA: ${ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
       ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
       BASE_DOMAIN: ${BASE_DOMAIN:?Set BASE_DOMAIN}
+    # Only 80, for the ACME HTTP-01 challenge and the redirect to HTTPS. Caddy
+    # keeps listening on 443 inside the container but publishes nothing: Xray
+    # owns the public 443 and relays to it whatever it does not authenticate.
     ports:
       - "80:80"
-      - "443:443"
-      - "443:443/udp"
     networks:
       backend:
         # The application reaches the Marzban API at http://marzban:8000 through
@@ -143,6 +144,8 @@ services:
         aliases:
           - marzban
       edge: {}
+      # Xray dials this proxy as its REALITY target, so the two share a network.
+      vpn-egress: {}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
@@ -322,8 +325,11 @@ services:
     command:
       - sh
       - /run/astra/bootstrap/marzban-run.sh
+    # The public HTTPS port. Anything that is not an authenticated REALITY
+    # client is relayed to Caddy, so this stays the entry point for the Mini App
+    # and the subscription host as well as for the VPN.
     ports:
-      - "${VLESS_PORT:-8443}:${VLESS_PORT:-8443}/tcp"
+      - "${VLESS_PORT:-443}:${VLESS_PORT:-443}/tcp"
     # Marzban stays off the backend network: the API is reachable only through
     # the reverse proxy, which owns the `marzban` alias there.
     networks:

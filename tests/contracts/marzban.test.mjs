@@ -117,7 +117,7 @@ test("the selected VLESS contract maps to Marzban's unlimited user model", () =>
   const vless = requireRecord(decisions.vless, "VLESS decision");
 
   assert.equal(vless.inboundTag, "VLESS TCP REALITY");
-  assert.equal(vless.port, 8443);
+  assert.equal(vless.port, 443);
   assert.equal(vless.transport, "raw_tcp");
   assert.equal(vless.security, "reality");
   assert.equal(vless.flow, "");

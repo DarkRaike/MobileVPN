@@ -16,7 +16,7 @@ Release запрещён, пока хотя бы один gate в
 - [ ] Marzban/Xray image scan и contract snapshot проверены тимлидом.
 - [ ] Все production-readiness gates закрыты доказательствами.
 - [ ] Telegram iOS/Android/Desktop smoke заполнен и подписан.
-- [ ] Host firewall публикует только 80/443/8443; SSH ограничен operator IP.
+- [ ] Host firewall публикует только 80/443; SSH ограничен operator IP.
 - [ ] DNS/HTTPS, webhook secret, REALITY target/SAN/time sync проверены.
 - [ ] Secret files имеют `0600`, не находятся в Git/image/command history.
 - [ ] App и operations images собраны CI и загружены на VPS под тегом
