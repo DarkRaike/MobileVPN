@@ -42,6 +42,10 @@ MARZBAN_HOST_REMARK = "Astra VPN"
 DOMAIN_PATTERN = re.compile(
     r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
 )
+IPV4_PATTERN = re.compile(
+    r"^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\.){3}"
+    r"(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)$"
+)
 MARZBAN_USERNAME_PATTERN = re.compile(r"^[a-z0-9_]{3,32}$")
 XRAY_LOG_LEVELS = ("debug", "info", "warning", "error", "none")
 TELEGRAM_BOT_TOKEN_PATTERN = re.compile(r"^\d+:[A-Za-z0-9_-]{20,}$")
@@ -317,8 +321,17 @@ def main() -> int:
         raise ConfigurationError("VLESS_PORT must be a valid TCP port")
 
     # Clients connect to the documented DNS-only record rather than to the
-    # public IP Marzban would otherwise detect once per start.
-    vpn_host = f"vpn.{base_domain}"
+    # public IP Marzban would otherwise detect once per start. The override
+    # exists for an operator whose `vpn` record cannot be used yet: without it
+    # a missing record can only be fixed by editing the deployment.
+    vpn_host = read_environment("REALITY_ENDPOINT_HOST", f"vpn.{base_domain}").lower()
+
+    if not DOMAIN_PATTERN.fullmatch(vpn_host) and not IPV4_PATTERN.fullmatch(
+        vpn_host
+    ):
+        raise ConfigurationError(
+            "REALITY_ENDPOINT_HOST must be a domain or an IPv4 address"
+        )
 
     reality_dest = read_environment("REALITY_DEST", "www.swift.com:443")
     reality_host, _ = parse_reality_destination(reality_dest)
