@@ -67,6 +67,46 @@ describe("validateTelegramInitData", () => {
     expect(result.authDate).toEqual(NOW);
   });
 
+  it("treats empty optional user fields as absent", () => {
+    const result = validateTelegramInitData(
+      createInitData({
+        user: JSON.stringify({
+          first_name: "Daniil",
+          id: 4503599627370495,
+          language_code: "",
+          last_name: "",
+          photo_url: "",
+          username: "",
+        }),
+      }),
+      BOT_TOKEN,
+      300,
+      NOW,
+    );
+
+    expect(result.user).toEqual({
+      firstName: "Daniil",
+      id: "4503599627370495",
+      languageCode: undefined,
+      lastName: undefined,
+      photoUrl: undefined,
+      username: undefined,
+    });
+  });
+
+  it("reports why init data was rejected", () => {
+    const initData = new URLSearchParams(createInitData());
+    initData.set("hash", "0".repeat(64));
+
+    expect(() =>
+      validateTelegramInitData(initData.toString(), BOT_TOKEN, 300, NOW),
+    ).toThrowError(
+      expect.objectContaining({
+        reason: "hash_mismatch",
+      }),
+    );
+  });
+
   it("rejects a hash that omits the signature field", () => {
     const parameters = new URLSearchParams(createInitData());
     parameters.delete("hash");

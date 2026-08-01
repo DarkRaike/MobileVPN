@@ -4,7 +4,10 @@ import { getRuntimeConfig } from "$lib/server/config/runtime";
 import { getDatabase } from "$lib/server/db/runtime";
 import { collectMonitoringSnapshot } from "$lib/server/observability/monitoring";
 import { constantTimeEquals } from "$lib/server/security/constant-time";
-import { consumeRateLimit } from "$lib/server/security/rate-limit";
+import {
+  consumeRateLimit,
+  resolveInternalClientKey,
+} from "$lib/server/security/rate-limit";
 
 const MONITORING_RATE_LIMIT = 60;
 const MONITORING_RATE_LIMIT_WINDOW_SECONDS = 60;
@@ -23,7 +26,7 @@ export const GET: RequestHandler = async ({ getClientAddress, request }) => {
   }
 
   const rateLimit = consumeRateLimit(
-    `monitoring:${getClientAddress()}`,
+    `monitoring:${resolveInternalClientKey(getClientAddress)}`,
     MONITORING_RATE_LIMIT,
     MONITORING_RATE_LIMIT_WINDOW_SECONDS,
   );

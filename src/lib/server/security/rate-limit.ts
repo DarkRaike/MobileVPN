@@ -82,6 +82,22 @@ export class InMemoryRateLimiter {
 
 const rateLimiter = new InMemoryRateLimiter();
 
+/**
+ * Internal services call the application directly instead of going through the
+ * reverse proxy, so the address header the node adapter requires is absent and
+ * `getClientAddress` throws. Those callers are already authenticated by a shared
+ * secret, so they share a single bucket.
+ */
+export function resolveInternalClientKey(
+  getClientAddress: () => string,
+): string {
+  try {
+    return getClientAddress();
+  } catch {
+    return "internal";
+  }
+}
+
 export function consumeRateLimit(
   key: string,
   limit: number,
