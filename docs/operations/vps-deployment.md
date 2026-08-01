@@ -30,7 +30,7 @@ REALITY и Telegram Mini App на одном сервере, и что оста�
 | Сервис             | Роль                                                                        |
 | ------------------ | --------------------------------------------------------------------------- |
 | `bootstrap`        | one-shot: генерирует секреты, REALITY-ключи, `xray_config.json` и env-файлы |
-| `marzban-init`     | one-shot: `alembic upgrade head` и создание админа, если его ещё нет        |
+| `marzban-init`     | one-shot: `alembic upgrade head` и синхронизация пароля sudo-админа         |
 | `app-init`         | one-shot: Drizzle migrations и идемпотентный seed тарифов 7/30/90           |
 | `marzban`          | Marzban на Unix-сокете и Xray REALITY на `8443/tcp`                         |
 | `app`              | SvelteKit Node server на внутреннем `3000`                                  |
@@ -66,6 +66,22 @@ docker compose --env-file deployment/production.env -f deployment/compose.produc
 
 Контейнер Marzban при этом не подключён к `backend`: он остаётся только в
 `vpn-egress`, и до его API нельзя достучаться в обход reverse proxy.
+
+### Маршруты на `sub`
+
+Хост подписки описан блоками `handle`, а не отдельными директивами. Caddy
+упорядочивает голые директивы по собственному списку, в котором `respond` идёт
+раньше `reverse_proxy`: замыкающий `respond 404` в таком блоке отвечает на все
+запросы, а проксирование `/sub/*` становится недостижимым, и любая ссылка
+подписки отдаёт пустой `404`. Блоки `handle` взаимоисключающие и применяются в
+порядке записи, поэтому маршрут остаётся рабочим.
+
+Проверить снаружи можно так: невалидный токен должен вернуть ответ Marzban с
+`content-type: application/json`, а не пустой `404` от Caddy.
+
+```bash
+curl -sS -D- -o/dev/null https://sub.example.com/sub/invalid-token
+```
 
 ## 3. DNS
 
