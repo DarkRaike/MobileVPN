@@ -79,6 +79,9 @@ services:
     volumes:
       - marzban-data:/var/lib/marzban
       - ./bootstrap:/run/astra/bootstrap:ro
+      # Importing the Marzban package executes the configured Xray binary, so
+      # this one-shot needs the same core the panel will run.
+      - ./xray/bin:/opt/xray:ro
       - ${DEPLOY_SECRET_DIRECTORY:-./secrets}:/run/astra/secrets:ro
     read_only: true
     tmpfs:
