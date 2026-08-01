@@ -129,7 +129,7 @@ HTTP-01 challenge и без корректного DNS получит отказ
 | `worker.env`             | секреты reconciliation worker                                                                                                                   |
 | `monitoring.env`         | секреты и параметры alerting                                                                                                                    |
 | `marzban.env`            | `UVICORN_UDS`, `XRAY_JSON`, `XRAY_SUBSCRIPTION_URL_PREFIX`                                                                                      |
-| `marzban-init.env`       | то же плюс `SUDO_USERNAME` и `SUDO_PASSWORD` для разового импорта админа                                                                        |
+| `marzban-init.env`       | то же плюс `SUDO_USERNAME` и `SUDO_PASSWORD` для импорта и синхронизации админа                                                                 |
 | `xray_config.json`       | inbound `VLESS_TCP_REALITY_V1` с приватным ключом и short ID                                                                                    |
 | `reality-client.json`    | публичные параметры подключения: public key, short ID, SNI, порт                                                                                |
 | `restic_password`        | пароль restic repository                                                                                                                        |
@@ -167,9 +167,21 @@ HTTP-01 challenge и без корректного DNS получит отказ
 
 На Marzban `v0.8.4` команда `admin import-from-env` умеет только создавать
 администратора: её ветка синхронизации падает на валидации
-`AdminPartialModify`. Поэтому `marzban-init` сначала проверяет наличие админа в
-базе и запускает импорт только при его отсутствии. Смена пароля выполняется
-через `marzban-cli admin update`, а не правкой env.
+`AdminPartialModify`. Поэтому обновление пароля выполняет
+`deployment/bootstrap/marzban_admin_sync.py`: при каждом старте он сверяет
+сохранённый bcrypt-хеш с текущим `SUDO_PASSWORD` и приводит его в соответствие,
+а импорт запускается только когда админа ещё нет. Хеш, записанный другой схемой,
+скрипт не трогает и останавливает запуск, чтобы не отрезать доступ к панели.
+
+Это делает стек сходящимся: если том `marzban-data` пережил перегенерацию
+`generated-secrets.json`, приложение и Marzban оказываются с разными паролями, и
+до появления синхронизации выдача навсегда падала с `MARZBAN_CREDENTIALS_REJECTED`
+(в более старых сборках — `MARZBAN_AUTH_FAILED`). Восстановление — обычный
+перезапуск стека.
+
+Менять пароль правкой env не нужно: он берётся из
+`generated-secrets.json`. Ротация — удалить `MARZBAN_PASSWORD` из этого файла и
+перезапустить стек.
 
 Порт `8000` не публикуется. Для доступа к панели используется временный
 override и SSH tunnel:
