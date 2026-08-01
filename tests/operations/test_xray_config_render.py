@@ -76,6 +76,13 @@ class XrayConfigRenderTests(unittest.TestCase):
         for rule in config["routing"]["rules"]:
             self.assertEqual(rule["inboundTag"], ["VLESS_TCP_REALITY_V2"])
 
+    def test_reality_diagnostics_stay_off_unless_requested(self) -> None:
+        reality = render()["inbounds"][0]["streamSettings"]["realitySettings"]
+        self.assertFalse(reality["show"])
+
+        loud = render(reality_show=True)["inbounds"][0]["streamSettings"]
+        self.assertTrue(loud["realitySettings"]["show"])
+
     def test_defaults_to_the_quiet_log_level(self) -> None:
         config = render()
 
