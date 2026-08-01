@@ -226,8 +226,14 @@ Xray config подключается read-only, поэтому изменени�
 XRAY_LOG_LEVEL=info docker compose --env-file deployment/production.env -f deployment/compose.production.yaml up -d --force-recreate bootstrap marzban
 ```
 
+Смотреть при этом надо **не** в `docker compose logs marzban`. Marzban
+перехватывает вывод процесса Xray во внутренний буфер и отдаёт его только через
+`/api/core/logs`, поэтому в логах контейнера видно лишь сообщения самого
+Marzban, а события уровня соединения — включая отклонённый REALITY-хендшейк —
+туда не попадают вовсе:
+
 ```bash
-docker compose --env-file deployment/production.env -f deployment/compose.production.yaml logs --tail=200 marzban
+docker compose --env-file deployment/production.env -f deployment/compose.production.yaml exec -T --user root app node scripts/xray-core-logs.mjs 30
 ```
 
 После разбора значение возвращается к `warning`. Access-логи не включаются ни
