@@ -10,8 +10,10 @@ can never connect while the stack keeps reporting healthy.
 
 The address is therefore reconciled to the application host on 443, which is
 where Caddy terminates TLS and forwards the tunnel path. The row also carries
-`security=tls` and the SNI, because the inbound behind Caddy speaks plaintext
-WebSocket and cannot tell clients any of that itself.
+`security=tls`, the SNI and the Host header, because the inbound behind Caddy
+speaks plaintext WebSocket and cannot tell clients any of that itself. The Host
+header is what selects the site block in Caddy: a client that leaves it empty
+never reaches the tunnel.
 
 A host list an operator has customised is left untouched: this script adopts
 Marzban's own default row, updates the row it wrote before, or creates the first
@@ -93,13 +95,14 @@ def reconcile(
     if not rows:
         connection.execute(
             "insert into hosts"
-            " (remark, address, port, sni, security, alpn, fingerprint,"
+            " (remark, address, port, sni, host, security, alpn, fingerprint,"
             " inbound_tag)"
-            " values (?, ?, ?, ?, ?, ?, ?, ?)",
+            " values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 remark,
                 address,
                 port,
+                sni or None,
                 sni or None,
                 TLS_SECURITY,
                 INHERIT_ALPN,
@@ -125,9 +128,9 @@ def reconcile(
         return READY
 
     connection.execute(
-        "update hosts set remark = ?, address = ?, port = ?, sni = ?,"
+        "update hosts set remark = ?, address = ?, port = ?, sni = ?, host = ?,"
         " security = ? where id = ?",
-        (remark, address, port, sni or None, TLS_SECURITY, host_id),
+        (remark, address, port, sni or None, sni or None, TLS_SECURITY, host_id),
     )
     connection.commit()
     print(
