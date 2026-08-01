@@ -279,16 +279,7 @@ def render_xray_config(
     # reads it to build client links and otherwise re-derives it by running
     # `xray x25519 -i`; a parse failure there rejects the whole inbound.
     reality["publicKey"] = public_key
-    # The empty short ID has to be accepted alongside the generated one because
-    # Marzban v0.8.4 copies the inbound before it assigns `sid`
-    # (`app/subscription/share.py`, `host_inbound = inbound.copy()` precedes
-    # `inbound["sid"] = random.choice(sids)`). The dict it mutates is shared, so
-    # the first link built after every Marzban start carries an empty short ID
-    # and every later one carries the real value. Accepting both keeps a
-    # subscription fetched in that window connectable instead of silently
-    # unauthenticated. Short IDs distinguish client groups; REALITY's security
-    # rests on the X25519 key, which this does not weaken.
-    reality["shortIds"] = ["", short_id]
+    reality["shortIds"] = [short_id]
 
     # Routing rules are not scoped to the inbound: the stack serves exactly one,
     # and Marzban inserts its own API rule ahead of these anyway. Keeping them
@@ -336,7 +327,7 @@ def main() -> int:
             "MARZBAN_USERNAME must match [a-z0-9_] and be 3-32 characters long"
         )
 
-    inbound_tag = read_environment("MARZBAN_VLESS_INBOUND_TAG", "VLESS_TCP_REALITY_V1")
+    inbound_tag = read_environment("MARZBAN_VLESS_INBOUND_TAG", "VLESS TCP REALITY")
     vless_port = positive_integer_environment("VLESS_PORT", 8443)
 
     if vless_port > 65535:
@@ -355,7 +346,7 @@ def main() -> int:
             "REALITY_ENDPOINT_HOST must be a domain or an IPv4 address"
         )
 
-    reality_dest = read_environment("REALITY_DEST", "www.nvidia.com:443")
+    reality_dest = read_environment("REALITY_DEST", "gateway.icloud.com:443")
     reality_host, _ = parse_reality_destination(reality_dest)
     reality_server_names = [
         name.strip()

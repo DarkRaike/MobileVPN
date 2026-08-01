@@ -12,7 +12,7 @@ sys.path.insert(
 
 from marzban_host_sync import READY, reconcile  # noqa: E402
 
-INBOUND_TAG = "VLESS_TCP_REALITY_V1"
+INBOUND_TAG = "VLESS TCP REALITY"
 REMARK = "Astra VPN"
 
 

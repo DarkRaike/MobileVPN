@@ -49,7 +49,7 @@ function marzbanUser(input: MarzbanUserInput) {
   return {
     dataLimit: 0,
     expiresAt: new Date(Math.floor(input.expiresAt.getTime() / 1_000) * 1_000),
-    inbounds: { vless: ["VLESS_TCP_REALITY_V1"] },
+    inbounds: { vless: ["VLESS TCP REALITY"] },
     status: "active" as const,
     subscriptionUrl: "https://sub.example.com/sub/secret-token",
     usedTrafficBytes: 0,

@@ -79,7 +79,7 @@ Caddy завершается на публичных портах 80/443. VLESS 
 
 Первая версия использует:
 
-- inbound `VLESS_TCP_REALITY_V1`;
+- inbound `VLESS TCP REALITY`;
 - VLESS + RAW/TCP;
 - TCP 8443;
 - REALITY;

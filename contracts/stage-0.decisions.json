@@ -249,7 +249,7 @@
   },
   "vless": {
     "protocol": "vless",
-    "inboundTag": "VLESS_TCP_REALITY_V1",
+    "inboundTag": "VLESS TCP REALITY",
     "listen": "0.0.0.0",
     "port": 8443,
     "transport": "raw_tcp",
@@ -260,8 +260,8 @@
     "trafficLimitBytes": 0,
     "resetStrategy": "no_reset",
     "reality": {
-      "target": "www.nvidia.com:443",
-      "serverNames": ["www.nvidia.com"],
+      "target": "gateway.icloud.com:443",
+      "serverNames": ["gateway.icloud.com"],
       "privateKeyStorage": "secret file outside the repository",
       "shortIdPattern": "^[0-9a-f]{16}$",
       "targetSelection": "require TLS 1.3, a matching SAN, and a classic X25519 key exchange; a target that selects a post-quantum hybrid such as X25519MLKEM768 disconnects authenticated clients on the pinned Xray build",
