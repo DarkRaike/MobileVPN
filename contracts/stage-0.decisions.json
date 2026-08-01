@@ -249,49 +249,17 @@
   },
   "vless": {
     "protocol": "vless",
-    "inboundTag": "VLESS TCP REALITY",
+    "inboundTag": "VLESS WS",
     "listen": "0.0.0.0",
     "port": 443,
-    "transport": "raw_tcp",
-    "security": "reality",
+    "transport": "websocket_over_tls",
+    "security": "tls",
     "flow": "",
     "flowDecision": "plain VLESS; xtls-rprx-vision authenticates and then carries no traffic between the pinned Xray 24.12.31 and the cores current mobile clients ship",
     "decryption": "none",
     "trafficLimitBytes": 0,
     "resetStrategy": "no_reset",
-    "reality": {
-      "target": "gateway.icloud.com:443",
-      "serverNames": ["gateway.icloud.com"],
-      "privateKeyStorage": "secret file outside the repository",
-      "shortIdPattern": "^[0-9a-f]{16}$",
-      "targetSelection": "require TLS 1.3, a matching SAN, and a classic X25519 key exchange; a target that selects a post-quantum hybrid such as X25519MLKEM768 disconnects authenticated clients on the pinned Xray build",
-      "keyExchangeConstraint": "classic X25519 only",
-      "measurementExpires": "a target can start selecting the hybrid at any time; re-measure before every release",
-      "lastMeasuredAt": "2026-08-01",
-      "rejectedTargets": [
-        {
-          "target": "www.microsoft.com:443",
-          "reason": "selects X25519MLKEM768, which the pinned Xray build cannot intercept"
-        },
-        {
-          "target": "www.swift.com:443",
-          "reason": "measured classic on 2026-08-01 and selecting X25519MLKEM768 the same day; ran in production and disconnected every authenticated client"
-        },
-        {
-          "target": "www.samsung.com:443",
-          "reason": "recorded as classic on 2026-08-01, re-measured the same day as X25519MLKEM768"
-        },
-        {
-          "target": "gateway.icloud.com:443",
-          "reason": "selects X25519MLKEM768"
-        },
-        {
-          "target": "dl.google.com:443",
-          "reason": "selects X25519MLKEM768"
-        }
-      ],
-      "timeSynchronizationRequired": true
-    }
+    "transportDecision": "VLESS over WebSocket behind Caddy on 443. REALITY's handshake is fingerprinted and dropped on the networks this serves; a request to a secret path of the site, under its own certificate, is not distinguishable from browsing that site."
   },
   "dataRetention": {
     "timezone": "UTC",

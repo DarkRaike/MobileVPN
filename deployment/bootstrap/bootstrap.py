@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Prepare deployment secrets, the Xray REALITY config and per-service env files.
+"""Prepare deployment secrets, the Xray config and per-service env files.
 
 The script runs as a one-shot Compose service before every other service starts.
 Generated values are persisted in ``generated-secrets.json`` and are only created
-when missing, so repeated runs keep credentials, REALITY keys and subscription
+when missing, so repeated runs keep credentials, the tunnel path and subscription
 URLs stable. Rendered env files and the Xray config are rewritten on every run so
 that changes in the stack env file propagate without manual edits.
 """
@@ -28,22 +28,21 @@ TEMPLATE_FILE = Path(
 GENERATED_STORE_FILE = SECRETS_DIRECTORY / "generated-secrets.json"
 XRAY_CONFIG_FILE = SECRETS_DIRECTORY / "xray_config.json"
 RESTIC_PASSWORD_FILE = SECRETS_DIRECTORY / "restic_password"
-REALITY_CLIENT_FILE = SECRETS_DIRECTORY / "reality-client.json"
+CLIENT_PARAMETERS_FILE = SECRETS_DIRECTORY / "client-parameters.json"
 
 # Runtime container paths, not host paths: services read the rendered files from
 # the same read-only bind mount.
 CONTAINER_SECRETS_DIRECTORY = "/run/astra/secrets"
 MARZBAN_SOCKET_PATH = "/run/marzban/uvicorn.sock"
 
+# The internal port Xray listens on. Caddy terminates TLS on the public 443 and
+# forwards one secret path here, so this is never published.
+WEBSOCKET_PORT = 2096
+
 # The core shipped in the pinned Marzban image, and where the compose file
 # mounts a newer one when the operator supplies it.
 BUNDLED_XRAY_EXECUTABLE = "/usr/local/bin/xray"
 UPGRADED_XRAY_EXECUTABLE = "/opt/xray/xray"
-
-# Xray holds the public 443 and relays everything it does not authenticate to
-# Caddy, which keeps its own 443 inside the container and publishes no port.
-REVERSE_PROXY_HOST = "reverse-proxy"
-REVERSE_PROXY_TLS_ENDPOINT = f"{REVERSE_PROXY_HOST}:443"
 
 # Label of the Marzban proxy host this deployment owns. It is also how
 # `marzban_host_sync.py` recognises its own row on the next start.
@@ -51,10 +50,6 @@ MARZBAN_HOST_REMARK = "Astra VPN"
 
 DOMAIN_PATTERN = re.compile(
     r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
-)
-IPV4_PATTERN = re.compile(
-    r"^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\.){3}"
-    r"(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)$"
 )
 MARZBAN_USERNAME_PATTERN = re.compile(r"^[a-z0-9_]{3,32}$")
 XRAY_LOG_LEVELS = ("debug", "info", "warning", "error", "none")
@@ -135,35 +130,6 @@ def load_generated_secrets() -> dict[str, str]:
     return {str(key): str(value) for key, value in stored.items()}
 
 
-def generate_reality_key_pair() -> tuple[str, str]:
-    """Generate an X25519 key pair with the Xray binary bundled in the image."""
-    executable = read_environment("XRAY_EXECUTABLE_PATH", BUNDLED_XRAY_EXECUTABLE)
-
-    try:
-        completed = subprocess.run(
-            [executable, "x25519"],
-            capture_output=True,
-            check=True,
-            text=True,
-            timeout=30,
-        )
-    except (OSError, subprocess.SubprocessError) as error:
-        raise ConfigurationError(
-            f"Unable to generate REALITY keys with {executable}"
-        ) from error
-
-    values = [
-        line.split(":", 1)[1].strip()
-        for line in completed.stdout.splitlines()
-        if ":" in line
-    ]
-
-    if len(values) < 2 or not values[0] or not values[1]:
-        raise ConfigurationError("Unexpected `xray x25519` output format")
-
-    return values[0], values[1]
-
-
 def ensure_generated_secrets(marzban_username: str) -> dict[str, str]:
     generated = load_generated_secrets()
 
@@ -177,14 +143,9 @@ def ensure_generated_secrets(marzban_username: str) -> dict[str, str]:
     ensure("MONITORING_SECRET", lambda: random_secret(32))
     ensure("TELEGRAM_WEBHOOK_SECRET", lambda: random_secret(32))
     ensure("MARZBAN_PASSWORD", lambda: random_secret(32))
-    ensure("REALITY_SHORT_ID", lambda: secrets.token_hex(8))
-
-    if not generated.get("REALITY_PRIVATE_KEY") or not generated.get(
-        "REALITY_PUBLIC_KEY"
-    ):
-        private_key, public_key = generate_reality_key_pair()
-        generated["REALITY_PRIVATE_KEY"] = private_key
-        generated["REALITY_PUBLIC_KEY"] = public_key
+    # An unguessable path is what keeps the tunnel from being found by anyone
+    # scanning the site: everything else on the host is the ordinary Mini App.
+    ensure("WEBSOCKET_PATH", lambda: "/" + secrets.token_urlsafe(24))
 
     # The admin username is operator owned; rotating it in the stack env file has
     # to reach Marzban through `admin import-from-env` on the next start.
@@ -247,14 +208,9 @@ def render_env_file(values: dict[str, str]) -> str:
 
 def render_xray_config(
     inbound_tag: str,
-    vless_port: int,
-    reality_dest: str,
-    reality_server_names: list[str],
-    private_key: str,
-    public_key: str,
-    short_id: str,
+    websocket_port: int,
+    websocket_path: str,
     log_level: str = "warning",
-    reality_show: bool = False,
 ) -> str:
     try:
         config = json.loads(TEMPLATE_FILE.read_text(encoding="utf-8"))
@@ -266,45 +222,20 @@ def render_xray_config(
     if not isinstance(inbounds, list) or len(inbounds) != 1:
         raise ConfigurationError("The Xray template must declare exactly one inbound")
 
-    # A rejected REALITY handshake is only reported below `warning`, so a client
-    # that cannot connect leaves no trace at the default level. Access logging
-    # stays off: the retention policy forbids it.
+    # A rejected connection is only reported below `warning`, so a client that
+    # cannot connect leaves no trace at the default level. Access logging stays
+    # off: the retention policy forbids it.
     config.setdefault("log", {})["loglevel"] = log_level
     config["log"]["access"] = "none"
 
     inbound = inbounds[0]
     inbound["tag"] = inbound_tag
-    inbound["port"] = vless_port
-    reality = inbound["streamSettings"]["realitySettings"]
-    # `show` makes REALITY print why it refused a handshake, which is the only
-    # way to tell a client that presented the wrong short ID from one whose
-    # ClientHello the build cannot parse at all. Both are logged identically as
-    # `processed invalid connection`. It prints one block per connection, so it
-    # stays off outside a diagnosis.
-    reality["show"] = reality_show
-    reality["dest"] = reality_dest
-    reality["serverNames"] = reality_server_names
-    reality["privateKey"] = private_key
-    # Xray ignores `publicKey` on an inbound that declares `dest`, but Marzban
-    # reads it to build client links and otherwise re-derives it by running
-    # `xray x25519 -i`; a parse failure there rejects the whole inbound.
-    reality["publicKey"] = public_key
-    reality["shortIds"] = [short_id]
+    # The listener is internal: Caddy terminates TLS on the public 443 and
+    # forwards this one path, so the port is never published.
+    inbound["port"] = websocket_port
+    inbound["streamSettings"]["wsSettings"]["path"] = websocket_path
 
-    # Routing rules are not scoped to the inbound: the stack serves exactly one,
-    # and Marzban inserts its own API rule ahead of these anyway. Keeping them
-    # tag free means renaming the inbound cannot leave a rule pointing at a tag
-    # that no longer exists.
     return json.dumps(config, indent=2) + "\n"
-
-
-def parse_reality_destination(value: str) -> tuple[str, str]:
-    host, separator, port = value.rpartition(":")
-
-    if not separator or not host or not port.isdigit():
-        raise ConfigurationError("REALITY_DEST must use the host:port format")
-
-    return host, port
 
 
 def main() -> int:
@@ -337,45 +268,14 @@ def main() -> int:
             "MARZBAN_USERNAME must match [a-z0-9_] and be 3-32 characters long"
         )
 
-    inbound_tag = read_environment("MARZBAN_VLESS_INBOUND_TAG", "VLESS TCP REALITY")
-    vless_port = positive_integer_environment("VLESS_PORT", 443)
+    inbound_tag = read_environment("MARZBAN_VLESS_INBOUND_TAG", "VLESS WS")
+    # Clients reach the tunnel over ordinary HTTPS on the application host, so
+    # the address is the name Caddy already holds a certificate for and the port
+    # is the one every website uses.
+    vpn_host = read_environment("VPN_HOST", f"app.{base_domain}").lower()
 
-    if vless_port > 65535:
-        raise ConfigurationError("VLESS_PORT must be a valid TCP port")
-
-    # Clients connect to the documented DNS-only record rather than to the
-    # public IP Marzban would otherwise detect once per start. The override
-    # exists for an operator whose `vpn` record cannot be used yet: without it
-    # a missing record can only be fixed by editing the deployment.
-    vpn_host = read_environment("REALITY_ENDPOINT_HOST", f"vpn.{base_domain}").lower()
-
-    if not DOMAIN_PATTERN.fullmatch(vpn_host) and not IPV4_PATTERN.fullmatch(
-        vpn_host
-    ):
-        raise ConfigurationError(
-            "REALITY_ENDPOINT_HOST must be a domain or an IPv4 address"
-        )
-
-    reality_dest = read_environment("REALITY_DEST", REVERSE_PROXY_TLS_ENDPOINT)
-    reality_host, _ = parse_reality_destination(reality_dest)
-    # Serving REALITY on the public 443 means the masquerade is this deployment's
-    # own reverse proxy, so the names clients present are the hosts it already
-    # holds certificates for. An external target keeps its own name instead.
-    default_server_names = (
-        f"app.{base_domain},sub.{base_domain}"
-        if reality_host == REVERSE_PROXY_HOST
-        else reality_host
-    )
-    reality_server_names = [
-        name.strip()
-        for name in read_environment(
-            "REALITY_SERVER_NAMES", default_server_names
-        ).split(",")
-        if name.strip()
-    ]
-
-    if not reality_server_names:
-        raise ConfigurationError("REALITY_SERVER_NAMES must list at least one SNI")
+    if not DOMAIN_PATTERN.fullmatch(vpn_host):
+        raise ConfigurationError("VPN_HOST must be a domain name")
 
     application_uid = positive_integer_environment("APP_UID", 1000)
     application_gid = positive_integer_environment("APP_GID", 1000)
@@ -398,14 +298,9 @@ def main() -> int:
         XRAY_CONFIG_FILE,
         render_xray_config(
             inbound_tag,
-            vless_port,
-            reality_dest,
-            reality_server_names,
-            generated["REALITY_PRIVATE_KEY"],
-            generated["REALITY_PUBLIC_KEY"],
-            generated["REALITY_SHORT_ID"],
+            WEBSOCKET_PORT,
+            generated["WEBSOCKET_PATH"],
             xray_log_level,
-            boolean_environment("REALITY_SHOW"),
         ),
     )
 
@@ -413,15 +308,14 @@ def main() -> int:
         write_private_file(RESTIC_PASSWORD_FILE, random_secret(32) + "\n")
 
     write_private_file(
-        REALITY_CLIENT_FILE,
+        CLIENT_PARAMETERS_FILE,
         json.dumps(
             {
-                "flow": "",
                 "inboundTag": inbound_tag,
-                "port": vless_port,
-                "publicKey": generated["REALITY_PUBLIC_KEY"],
-                "serverNames": reality_server_names,
-                "shortId": generated["REALITY_SHORT_ID"],
+                "network": "ws",
+                "path": generated["WEBSOCKET_PATH"],
+                "port": 443,
+                "security": "tls",
                 "vpnHost": vpn_host,
             },
             indent=2,
@@ -504,9 +398,7 @@ def main() -> int:
         "DOCS": "False",
         "SQLALCHEMY_DATABASE_URL": "sqlite:////var/lib/marzban/db.sqlite3",
         "UVICORN_UDS": MARZBAN_SOCKET_PATH,
-        # The core the image was built with predates post-quantum key exchange in
-        # REALITY, so a current client's ClientHello never authenticates against
-        # it. Marzban runs whatever binary this points at, which is how a newer
+        # Marzban runs whatever binary this points at, which is how a newer
         # core reaches the deployment without unpinning the image.
         "XRAY_EXECUTABLE_PATH": xray_executable_path,
         "XRAY_JSON": f"{CONTAINER_SECRETS_DIRECTORY}/xray_config.json",
@@ -517,6 +409,21 @@ def main() -> int:
     write_private_file(
         SECRETS_DIRECTORY / "marzban.env", render_env_file(marzban_environment)
     )
+    # Caddy needs the generated tunnel path, and the values Compose already
+    # passes it have to survive the switch to an env file entrypoint.
+    write_private_file(
+        SECRETS_DIRECTORY / "caddy.env",
+        render_env_file(
+            {
+                "ACME_CA": read_environment(
+                    "ACME_CA", "https://acme-v02.api.letsencrypt.org/directory"
+                ),
+                "ACME_EMAIL": require_environment("ACME_EMAIL"),
+                "BASE_DOMAIN": base_domain,
+                "WEBSOCKET_PATH": generated["WEBSOCKET_PATH"],
+            }
+        ),
+    )
     # Marzban authenticates admins against its own database and asks for the
     # sudo credentials to be removed once imported, so only the one-shot init
     # service receives them.
@@ -526,8 +433,9 @@ def main() -> int:
             {
                 **marzban_environment,
                 "MARZBAN_HOST_ADDRESS": vpn_host,
-                "MARZBAN_HOST_PORT": str(vless_port),
+                "MARZBAN_HOST_PORT": "443",
                 "MARZBAN_HOST_REMARK": MARZBAN_HOST_REMARK,
+                "MARZBAN_HOST_SNI": vpn_host,
                 "MARZBAN_VLESS_INBOUND_TAG": inbound_tag,
                 "SUDO_PASSWORD": generated["MARZBAN_PASSWORD"],
                 "SUDO_USERNAME": marzban_username,
@@ -540,12 +448,10 @@ def main() -> int:
             {
                 "level": "info",
                 "message": "Deployment secrets are ready",
-                "realityInboundTag": inbound_tag,
-                "realityServerNames": reality_server_names,
+                "inboundTag": inbound_tag,
+                "vpnHost": vpn_host,
                 "secretsDirectory": str(SECRETS_DIRECTORY),
                 "subscriptionHost": f"sub.{base_domain}",
-                "vlessPort": vless_port,
-                "vpnHost": vpn_host,
             }
         )
     )

@@ -217,14 +217,10 @@ export function assertProductionReady(decisions) {
   }
 
   const vless = requireRecord(contract.vless, "VLESS");
-  const reality = requireRecord(vless.reality, "REALITY");
-  if (
-    typeof reality.target !== "string" ||
-    reality.target.length === 0 ||
-    !Array.isArray(reality.serverNames) ||
-    reality.serverNames.length === 0
-  ) {
-    throw new Error("A measured REALITY target and server names are required");
+  // The tunnel rides the application host's own certificate, so what has to be
+  // fixed is the inbound it is served from, not a masquerade target.
+  if (typeof vless.inboundTag !== "string" || vless.inboundTag.length === 0) {
+    throw new Error("A concrete VLESS inbound tag is required");
   }
 
   return true;

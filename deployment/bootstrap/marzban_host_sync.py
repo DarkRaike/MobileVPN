@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Point the Marzban proxy host at the REALITY endpoint of this deployment.
+"""Point the Marzban proxy host at the HTTPS endpoint of this deployment.
 
 Marzban creates one host row the first time it sees an inbound tag, with the
 literal address `{SERVER_IP}`. That placeholder is resolved once per start by
@@ -8,11 +8,10 @@ has no egress at that moment. The resolved value is copied verbatim into every
 issued subscription, so one failed lookup hands out client configurations that
 can never connect while the stack keeps reporting healthy.
 
-The address is therefore reconciled to `vpn.<BASE_DOMAIN>`, the endpoint the
-deployment documents and the operator points at the VPS with a DNS-only record.
-Only the address, port and remark are owned here; SNI, security and fingerprint
-stay inherited from the inbound so the host row cannot drift away from the
-rendered Xray config.
+The address is therefore reconciled to the application host on 443, which is
+where Caddy terminates TLS and forwards the tunnel path. The row also carries
+`security=tls` and the SNI, because the inbound behind Caddy speaks plaintext
+WebSocket and cannot tell clients any of that itself.
 
 A host list an operator has customised is left untouched: this script adopts
 Marzban's own default row, updates the row it wrote before, or creates the first
@@ -33,9 +32,10 @@ import sys
 DATABASE_URL_PREFIX = "sqlite:///"
 MARZBAN_DEFAULT_ADDRESS = "{SERVER_IP}"
 
-# Marzban stores these SQLAlchemy enums by member name. `inbound_default` and
-# `none` keep security, ALPN and fingerprint inherited from the inbound.
-INHERIT_SECURITY = "inbound_default"
+# Marzban stores these SQLAlchemy enums by member name. The inbound itself runs
+# plaintext WebSocket behind Caddy, so the host row is what tells clients the
+# connection is TLS; ALPN and fingerprint stay inherited.
+TLS_SECURITY = "tls"
 INHERIT_ALPN = "none"
 INHERIT_FINGERPRINT = "none"
 
@@ -78,6 +78,7 @@ def reconcile(
     address: str,
     port: int,
     remark: str,
+    sni: str = "",
 ) -> int:
     ensure_inbound(connection, inbound_tag)
     rows = connection.execute(
@@ -92,13 +93,15 @@ def reconcile(
     if not rows:
         connection.execute(
             "insert into hosts"
-            " (remark, address, port, security, alpn, fingerprint, inbound_tag)"
-            " values (?, ?, ?, ?, ?, ?, ?)",
+            " (remark, address, port, sni, security, alpn, fingerprint,"
+            " inbound_tag)"
+            " values (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 remark,
                 address,
                 port,
-                INHERIT_SECURITY,
+                sni or None,
+                TLS_SECURITY,
                 INHERIT_ALPN,
                 INHERIT_FINGERPRINT,
                 inbound_tag,
@@ -122,8 +125,9 @@ def reconcile(
         return READY
 
     connection.execute(
-        "update hosts set remark = ?, address = ?, port = ? where id = ?",
-        (remark, address, port, host_id),
+        "update hosts set remark = ?, address = ?, port = ?, sni = ?,"
+        " security = ? where id = ?",
+        (remark, address, port, sni or None, TLS_SECURITY, host_id),
     )
     connection.commit()
     print(
@@ -138,6 +142,7 @@ def main() -> int:
     address = os.environ.get("MARZBAN_HOST_ADDRESS", "").strip().lower()
     port = os.environ.get("MARZBAN_HOST_PORT", "").strip()
     remark = os.environ.get("MARZBAN_HOST_REMARK", "").strip()
+    sni = os.environ.get("MARZBAN_HOST_SNI", "").strip().lower()
     database_url = os.environ.get("SQLALCHEMY_DATABASE_URL", "").strip()
 
     try:
@@ -157,7 +162,9 @@ def main() -> int:
 
         try:
             connection.execute("pragma foreign_keys = on")
-            return reconcile(connection, inbound_tag, address, int(port), remark)
+            return reconcile(
+                connection, inbound_tag, address, int(port), remark, sni
+            )
         except sqlite3.Error as error:
             raise Unusable(f"Marzban database is unusable: {error}") from error
         finally:

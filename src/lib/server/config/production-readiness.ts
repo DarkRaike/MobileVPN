@@ -36,26 +36,18 @@ export function isProductionReadinessApproved(decisions: unknown): boolean {
 
   const requiredGateIds = readiness.requiredGateIds;
   const gates = readiness.gates;
-  const reality = vless.reality;
 
   if (
     !Array.isArray(requiredGateIds) ||
     !isRecord(gates) ||
-    !isRecord(reality) ||
     !isProductionDomain(domains.baseDomain)
   ) {
     return false;
   }
 
-  if (
-    typeof reality.target !== "string" ||
-    reality.target.length === 0 ||
-    !Array.isArray(reality.serverNames) ||
-    reality.serverNames.length === 0 ||
-    !reality.serverNames.every(
-      (serverName) => typeof serverName === "string" && serverName.length > 0,
-    )
-  ) {
+  // The tunnel rides the application host's own certificate, so the transport
+  // decision has to name a concrete inbound rather than a masquerade target.
+  if (typeof vless.inboundTag !== "string" || vless.inboundTag.length === 0) {
     return false;
   }
 

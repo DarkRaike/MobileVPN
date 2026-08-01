@@ -14,10 +14,7 @@ function approvedDecisions(): Record<string, unknown> {
     },
     productionReady: true,
     vless: {
-      reality: {
-        serverNames: ["www.example.org"],
-        target: "www.example.org:443",
-      },
+      inboundTag: "VLESS WS",
     },
   };
 }

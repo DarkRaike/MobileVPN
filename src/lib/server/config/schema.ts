@@ -86,7 +86,7 @@ const environmentSchema = z
     ),
     MARZBAN_VLESS_INBOUND_TAG: z.preprocess(
       emptyStringToUndefined,
-      z.string().trim().min(1).max(128).default("VLESS TCP REALITY"),
+      z.string().trim().min(1).max(128).default("VLESS WS"),
     ),
     MONITORING_SECRET: z.preprocess(
       emptyStringToUndefined,

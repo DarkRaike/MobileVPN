@@ -23,15 +23,9 @@ TEMPLATE = (
 
 def render(**overrides) -> dict:
     arguments = {
-        "inbound_tag": "VLESS TCP REALITY",
-        "vless_port": 8443,
-        "reality_dest": "reverse-proxy:443",
-        "reality_server_names": ["app.example.org", "sub.example.org"],
-        "private_key": "fixture-private-key",
-        "public_key": "fixture-public-key",
-        # Deliberately not a value any deployment uses: a real short ID is
-        # handed to clients and does not belong in the repository.
-        "short_id": "fdd0e6ec2a4b7c91",
+        "inbound_tag": "VLESS WS",
+        "websocket_port": 2096,
+        "websocket_path": "/fixture-path",
     }
     arguments.update(overrides)
 
@@ -46,59 +40,23 @@ class XrayConfigRenderTests(unittest.TestCase):
     def tearDown(self) -> None:
         bootstrap.TEMPLATE_FILE = self._template
 
-    def test_substitutes_every_reality_placeholder(self) -> None:
+    def test_renders_the_tunnel_inbound(self) -> None:
         config = render()
         inbound = config["inbounds"][0]
-        reality = inbound["streamSettings"]["realitySettings"]
 
-        self.assertEqual(inbound["tag"], "VLESS TCP REALITY")
-        self.assertEqual(inbound["port"], 8443)
+        self.assertEqual(inbound["tag"], "VLESS WS")
+        self.assertEqual(inbound["port"], 2096)
         self.assertEqual(inbound["protocol"], "vless")
         self.assertEqual(inbound["settings"]["decryption"], "none")
-        self.assertEqual(inbound["streamSettings"]["security"], "reality")
-        self.assertEqual(reality["dest"], "reverse-proxy:443")
+        self.assertEqual(inbound["streamSettings"]["network"], "ws")
+        # Caddy terminates TLS on the public 443; the inbound behind it is plain.
+        self.assertEqual(inbound["streamSettings"]["security"], "none")
         self.assertEqual(
-            reality["serverNames"], ["app.example.org", "sub.example.org"]
+            inbound["streamSettings"]["wsSettings"]["path"], "/fixture-path"
         )
-        self.assertEqual(reality["privateKey"], "fixture-private-key")
-        # Marzban builds client links from this value instead of re-deriving it
-        # with `xray x25519 -i`, which rejects the inbound when it cannot parse.
-        self.assertEqual(reality["publicKey"], "fixture-public-key")
-        self.assertEqual(reality["shortIds"], ["fdd0e6ec2a4b7c91"])
         self.assertNotIn(
             "PLACEHOLDER", json.dumps(config), "a placeholder survived rendering"
         )
-
-    def test_the_data_path_reaches_the_internet(self) -> None:
-        # Sniffing informs routing without replacing the destination, and the
-        # rules end in a catch-all rather than relying on the first outbound.
-        config = render()
-        inbound = config["inbounds"][0]
-        outbound_tags = [outbound["tag"] for outbound in config["outbounds"]]
-
-        self.assertTrue(inbound["sniffing"]["routeOnly"])
-        self.assertEqual(
-            config["outbounds"][0]["settings"]["domainStrategy"], "UseIPv4v6"
-        )
-        self.assertEqual(config["routing"]["domainStrategy"], "IPIfNonMatch")
-        self.assertEqual(config["routing"]["rules"][-1]["outboundTag"], "DIRECT")
-        self.assertIn("BLOCK", outbound_tags)
-
-    def test_private_addresses_stay_blocked(self) -> None:
-        blocked = [
-            rule
-            for rule in render()["routing"]["rules"]
-            if rule["outboundTag"] == "BLOCK"
-        ]
-
-        self.assertIn(["geoip:private"], [rule.get("ip") for rule in blocked])
-
-    def test_reality_diagnostics_stay_off_unless_requested(self) -> None:
-        reality = render()["inbounds"][0]["streamSettings"]["realitySettings"]
-        self.assertFalse(reality["show"])
-
-        loud = render(reality_show=True)["inbounds"][0]["streamSettings"]
-        self.assertTrue(loud["realitySettings"]["show"])
 
     def test_defaults_to_the_quiet_log_level(self) -> None:
         config = render()

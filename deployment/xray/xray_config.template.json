@@ -6,26 +6,19 @@
   },
   "inbounds": [
     {
-      "tag": "VLESS TCP REALITY",
+      "tag": "VLESS WS",
       "listen": "0.0.0.0",
-      "port": 443,
+      "port": 2096,
       "protocol": "vless",
       "settings": {
         "clients": [],
         "decryption": "none"
       },
       "streamSettings": {
-        "network": "tcp",
-        "security": "reality",
-        "realitySettings": {
-          "show": false,
-          "dest": "PLACEHOLDER:443",
-          "xver": 0,
-          "serverNames": ["PLACEHOLDER"],
-          "privateKey": "PLACEHOLDER",
-          "publicKey": "PLACEHOLDER",
-          "shortIds": ["PLACEHOLDER"],
-          "maxTimeDiff": 0
+        "network": "ws",
+        "security": "none",
+        "wsSettings": {
+          "path": "PLACEHOLDER"
         }
       },
       "sniffing": {
