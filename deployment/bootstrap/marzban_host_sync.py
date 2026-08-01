@@ -39,8 +39,11 @@ INHERIT_SECURITY = "inbound_default"
 INHERIT_ALPN = "none"
 INHERIT_FINGERPRINT = "none"
 
+# A domain is the documented endpoint; a literal address is accepted so an
+# operator whose `vpn` record is unusable can publish the VPS address directly.
 HOST_ADDRESS_PATTERN = re.compile(
     r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
+    r"|^(?:\d{1,3}\.){3}\d{1,3}$"
 )
 
 READY = 0
