@@ -19,14 +19,19 @@ app.{$BASE_DOMAIN} {
 	}
 }
 
+# Only the subscription paths reach Marzban here. `handle` blocks are mutually
+# exclusive and evaluated in source order, unlike bare directives: Caddy sorts
+# those by its own directive order, where `respond` precedes `reverse_proxy`,
+# so a trailing catch-all `respond` silently swallows every proxied route.
 sub.{$BASE_DOMAIN} {
-	@denied path /api/* /dashboard/* /docs* /openapi.json /redoc*
-	respond @denied 404
+	handle /sub/* {
+		reverse_proxy unix//run/marzban/uvicorn.sock
+	}
 
-	@subscription path /sub/*
-	reverse_proxy @subscription unix//run/marzban/uvicorn.sock
-
-	respond 404
+	# Default deny: the dashboard, the API and the docs are never exposed here.
+	handle {
+		respond 404
+	}
 }
 
 # Private Marzban API for the application. Reachable only inside the internal
