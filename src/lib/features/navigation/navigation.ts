@@ -4,7 +4,6 @@ export const sections = [
   { id: "profile", label: "Профиль" },
 ] as const;
 
-export type SectionId = (typeof sections)[number]["id"];
 export type SectionIndex = 0 | 1 | 2;
 
 export function clampSectionIndex(index: number): SectionIndex {

@@ -4,17 +4,17 @@ import { describe, expect, it } from "vitest";
 
 import {
   InMemoryRateLimiter,
-  resolveInternalClientKey,
+  resolveClientKey,
 } from "../../src/lib/server/security/rate-limit";
 
-describe("resolveInternalClientKey", () => {
+describe("resolveClientKey", () => {
   it("uses the client address when the adapter can resolve it", () => {
-    expect(resolveInternalClientKey(() => "203.0.113.7")).toBe("203.0.113.7");
+    expect(resolveClientKey(() => "203.0.113.7")).toBe("203.0.113.7");
   });
 
   it("falls back to a shared key when the address header is absent", () => {
     expect(
-      resolveInternalClientKey(() => {
+      resolveClientKey(() => {
         throw new Error("Address header was specified but is absent");
       }),
     ).toBe("internal");

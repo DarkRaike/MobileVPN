@@ -23,6 +23,7 @@
           "xver": 0,
           "serverNames": ["PLACEHOLDER"],
           "privateKey": "PLACEHOLDER",
+          "publicKey": "PLACEHOLDER",
           "shortIds": ["PLACEHOLDER"]
         }
       },

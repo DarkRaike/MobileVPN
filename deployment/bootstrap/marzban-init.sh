@@ -1,7 +1,9 @@
 #!/bin/sh
-# Apply Marzban migrations and make sure the sudo admin matches the generated
-# credentials. The sync script owns the update path, because
-# `marzban-cli admin import-from-env` can only create an admin on v0.8.4.
+# Apply Marzban migrations, make sure the sudo admin matches the generated
+# credentials, and point the proxy host at the REALITY endpoint of this
+# deployment. The sync scripts own the update paths, because
+# `marzban-cli admin import-from-env` can only create an admin on v0.8.4 and
+# the host address is otherwise guessed from an outbound IP lookup.
 set -eu
 
 alembic upgrade head
@@ -19,3 +21,5 @@ case "$status" in
   exit 1
   ;;
 esac
+
+python3 /run/astra/bootstrap/marzban_host_sync.py
