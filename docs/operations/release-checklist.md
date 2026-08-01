@@ -56,11 +56,14 @@ Release запрещён, пока хотя бы один gate в
 5. Проверить `docker compose ps`, healthchecks и отсутствие restart loop.
 6. Проверить HTTPS/security headers, `/healthz`, `/readyz`, закрытые Marzban
    routes на subscription host и отсутствие публичных 3000/8000/2019.
-7. Проверить internal monitoring: все signals `ok`.
-8. Выполнить контролируемый smoke без повторного использования payment payload.
-9. Наблюдать минимум 30 минут: 5xx, auth failures, payments, paid-without-sub,
-   provisioning, Marzban, support delivery, backup.
-10. Сохранить release evidence; CD не используется.
+7. Проверить VLESS endpoint снаружи: TLS-проба `vpn.<domain>:<VLESS_PORT>`
+   возвращает сертификат маскировочного сайта (команда в
+   [monitoring.md](monitoring.md)). Внутренние signals это не покрывают.
+8. Проверить internal monitoring: все signals `ok`.
+9. Выполнить контролируемый smoke без повторного использования payment payload.
+10. Наблюдать минимум 30 минут: 5xx, auth failures, payments, paid-without-sub,
+    provisioning, Marzban, support delivery, backup.
+11. Сохранить release evidence; CD не используется.
 
 ## Rollback criteria
 
