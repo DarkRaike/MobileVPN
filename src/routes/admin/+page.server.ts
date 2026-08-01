@@ -283,14 +283,27 @@ export const actions = {
         config.subscriptionUrlEncryptionKey,
         grant.orderId,
       );
-      const provisioned = result.status === "applied";
+
+      if (result.status === "failed") {
+        // The order exists and stays retryable, so the administrator has to see
+        // why Marzban refused it instead of a reassuring acceptance message.
+        return {
+          action,
+          code: result.errorCode,
+          entityId: grant.orderId,
+          message:
+            "Заказ создан, но Marzban не подтвердил выдачу. Повторите её в разделе «Заказы».",
+          ok: false as const,
+        };
+      }
 
       return {
         action,
         entityId: grant.orderId,
-        message: provisioned
-          ? `Доступ выдан до ${grant.targetExpiresAt.toLocaleDateString("ru-RU")}.`
-          : "Выдача принята. Доступ появится после подтверждения Marzban.",
+        message:
+          result.status === "applied"
+            ? `Доступ выдан до ${grant.targetExpiresAt.toLocaleDateString("ru-RU")}.`
+            : "Выдача принята. Доступ появится после подтверждения Marzban.",
         ok: true as const,
       };
     } catch (error) {

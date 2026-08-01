@@ -2,19 +2,22 @@
   import { enhance } from "$app/forms";
   import type { SubmitFunction } from "@sveltejs/kit";
 
+  type Grant = {
+    createdAt: Date;
+    id: string;
+    planName: string;
+    provisioningErrorCode: string | null;
+    provisioningStatus:
+      "failed" | "not_started" | "pending" | "processing" | "succeeded";
+    telegramUserId: string;
+  };
+
   let {
     adminTelegramUserId,
     grants,
   }: {
     adminTelegramUserId: string;
-    grants: Array<{
-      createdAt: Date;
-      id: string;
-      planName: string;
-      provisioningStatus: string;
-      status: string;
-      telegramUserId: string;
-    }>;
+    grants: Grant[];
   } = $props();
 
   let submitting = $state(false);
@@ -41,6 +44,18 @@
       minute: "2-digit",
       month: "short",
     }).format(new Date(value));
+  }
+
+  function provisioningLabel(status: Grant["provisioningStatus"]): string {
+    const labels: Record<Grant["provisioningStatus"], string> = {
+      failed: "Ошибка выдачи",
+      not_started: "Не начата",
+      pending: "В очереди",
+      processing: "Выполняется",
+      succeeded: "Доступ выдан",
+    };
+
+    return labels[status];
   }
 </script>
 
@@ -113,8 +128,14 @@
               </span>
             </div>
             <p class="mt-1 mb-0 text-xs text-[color:var(--color-muted)]">
-              {grant.status} · выдача {grant.provisioningStatus}
+              {provisioningLabel(grant.provisioningStatus)}
             </p>
+            {#if grant.provisioningErrorCode}
+              <p class="mt-1 mb-0 text-xs text-red-400">
+                Безопасный код ошибки: {grant.provisioningErrorCode} · повторите выдачу
+                в разделе «Заказы»
+              </p>
+            {/if}
           </li>
         {/each}
       </ul>

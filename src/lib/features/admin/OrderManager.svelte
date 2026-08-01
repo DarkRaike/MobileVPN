@@ -126,7 +126,9 @@
             {/if}
           </div>
 
-          {#if order.status === "provisioning_failed" && order.paymentStatus === "succeeded" && order.provisioningStatus === "failed"}
+          <!-- A grant carries no payment, so only purchases have to be settled;
+               this mirrors the rule enforced by requeueProvisioningOrder. -->
+          {#if order.status === "provisioning_failed" && order.provisioningStatus === "failed" && (order.source === "admin_grant" || order.paymentStatus === "succeeded")}
             <form
               method="POST"
               action="?/retryProvisioning"
