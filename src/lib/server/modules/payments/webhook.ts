@@ -1,4 +1,3 @@
-import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { ApplicationError } from "../../application-error";
@@ -235,22 +234,4 @@ export async function processTelegramPaymentUpdate(
     duplicate: result.duplicate,
     kind: "successful_payment",
   };
-}
-
-export async function wasPaymentEventProcessed(
-  database: Database,
-  eventId: string,
-): Promise<boolean> {
-  const records = await database
-    .select({ processedAt: paymentEvents.processedAt })
-    .from(paymentEvents)
-    .where(
-      and(
-        eq(paymentEvents.provider, "telegram_stars"),
-        eq(paymentEvents.externalEventId, eventId),
-      ),
-    )
-    .limit(1);
-
-  return Boolean(records[0]?.processedAt);
 }

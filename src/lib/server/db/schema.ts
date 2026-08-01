@@ -666,4 +666,3 @@ export const adminAuditLog = sqliteTable(
 );
 
 export type UserRecord = typeof users.$inferSelect;
-export type NewUserRecord = typeof users.$inferInsert;
