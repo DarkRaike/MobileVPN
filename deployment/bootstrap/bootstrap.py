@@ -290,10 +290,10 @@ def render_xray_config(
     # rests on the X25519 key, which this does not weaken.
     reality["shortIds"] = ["", short_id]
 
-    for rule in config.get("routing", {}).get("rules", []):
-        if isinstance(rule.get("inboundTag"), list):
-            rule["inboundTag"] = [inbound_tag]
-
+    # Routing rules are not scoped to the inbound: the stack serves exactly one,
+    # and Marzban inserts its own API rule ahead of these anyway. Keeping them
+    # tag free means renaming the inbound cannot leave a rule pointing at a tag
+    # that no longer exists.
     return json.dumps(config, indent=2) + "\n"
 
 
@@ -399,7 +399,7 @@ def main() -> int:
         REALITY_CLIENT_FILE,
         json.dumps(
             {
-                "flow": "xtls-rprx-vision",
+                "flow": "",
                 "inboundTag": inbound_tag,
                 "port": vless_port,
                 "publicKey": generated["REALITY_PUBLIC_KEY"],
