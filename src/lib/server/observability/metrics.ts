@@ -23,12 +23,17 @@ function countRecent(target: number[], now: number): number {
   return target.length;
 }
 
+// The monitoring endpoint answers 503 to report a critical snapshot. Counting
+// that answer as an application failure would feed the signal that produced it
+// and keep it critical for good once anything tripped it once.
+const STATUS_REPORTING_ROUTES = new Set(["/api/internal/monitoring"]);
+
 export function recordRequestOutcome(
   pathname: string,
   status: number,
   occurredAt = Date.now(),
 ): void {
-  if (status >= 500) {
+  if (status >= 500 && !STATUS_REPORTING_ROUTES.has(pathname)) {
     record(events.application5xx, occurredAt);
   }
 

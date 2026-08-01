@@ -24,4 +24,14 @@ describe("request metrics", () => {
       windowSeconds: 300,
     });
   });
+
+  it("ignores the monitoring endpoint reporting a critical snapshot", () => {
+    const now = Date.UTC(2026, 6, 28, 10, 0, 0);
+
+    for (let poll = 1; poll <= 6; poll += 1) {
+      recordRequestOutcome("/api/internal/monitoring", 503, now - poll * 1_000);
+    }
+
+    expect(getRecentRequestMetrics(now).application5xx).toBe(0);
+  });
 });
