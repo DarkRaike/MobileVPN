@@ -438,13 +438,27 @@ services:
       start_period: 70m
     restart: unless-stopped
 
+# Docker gives every bridge an MTU of 1500, so a container advertises MSS 1460
+# and sends full size packets. A host whose real path MTU is lower drops them
+# silently, and because the ICMP that should report it does not come back, the
+# connection does not fail — it stalls. Small packets keep flowing, which is why
+# a TCP handshake completes and the TLS ServerHello behind it never arrives.
+#
+# Measure before changing this: `ping -c1 -M do -s <size> <host>` from the VPS,
+# where the packet is `size + 28`. The value below has to fit the smallest path
+# the server actually uses, including the one to its own clients.
 networks:
   backend:
     internal: true
   backup-egress:
+    driver_opts: &network-mtu
+      com.docker.network.driver.mtu: ${DOCKER_NETWORK_MTU:-1400}
   edge:
+    driver_opts: *network-mtu
   telegram-egress:
+    driver_opts: *network-mtu
   vpn-egress:
+    driver_opts: *network-mtu
 
 volumes:
   app-data:

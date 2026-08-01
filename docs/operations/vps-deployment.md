@@ -56,6 +56,45 @@ REALITY и Telegram Mini App на одном сервере, и что оста�
 docker compose --env-file deployment/production.env -f deployment/compose.production.yaml up -d --force-recreate app worker monitoring
 ```
 
+То же и с Xray: `bootstrap` перезаписывает `xray_config.json`, но определение
+сервиса `marzban` при этом не меняется, поэтому обычный `up -d` его не
+пересоздаёт — ядро продолжает работать с конфигом, прочитанным при старте.
+Любая правка `REALITY_*`, `VLESS_PORT`, `XRAY_LOG_LEVEL` или
+`MARZBAN_VLESS_INBOUND_TAG` требует явного пересоздания:
+
+```bash
+docker compose --env-file deployment/production.env -f deployment/compose.production.yaml up -d --force-recreate bootstrap marzban
+```
+
+Расхождение между файлом и загруженным ядром ловит шаг `inbound_resolved` в
+`scripts/vpn-diagnose.mjs`: он сверяет теги, которые Marzban разобрал, с
+отрендеренным файлом.
+
+### MTU сетей Docker
+
+Docker выдаёт мостам MTU 1500. Если реальный path MTU до сервера или до его
+клиентов меньше, полноразмерные пакеты теряются молча: ICMP с сообщением об
+этом не доходит, соединение не рвётся, а зависает. Мелкое проходит — поэтому
+TCP-рукопожатие завершается, а TLS ServerHello за ним не приходит никогда, и
+туннель отдаёт несколько сотен байт и встаёт.
+
+Измеряется с VPS, размер пакета равен `size + 28`:
+
+```bash
+for s in 1400 1412 1432 1464 1472; do printf "%s: " $s; ping -c1 -W2 -M do -s $s 1.1.1.1 >/dev/null 2>&1 && echo OK || echo FAIL; done
+```
+
+Проверять надо и до внешнего хоста, и до реального клиента. `DOCKER_NETWORK_MTU`
+в `production.env` должен быть ниже наименьшего найденного значения; по
+умолчанию `1400`. Внутренняя сеть `backend` не затрагивается — она не выходит
+за пределы хоста.
+
+Смена MTU требует пересоздания самих сетей, а значит полной остановки стека:
+
+```bash
+docker compose --env-file deployment/production.env -f deployment/compose.production.yaml down && docker compose --env-file deployment/production.env -f deployment/compose.production.yaml up -d
+```
+
 ### Доступ к Marzban API
 
 Без `UVICORN_SSL_CERTFILE` Marzban намеренно слушает только loopback, поэтому
