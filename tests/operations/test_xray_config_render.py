@@ -28,6 +28,7 @@ def render(**overrides) -> dict:
         "reality_dest": "www.swift.com:443",
         "reality_server_names": ["www.swift.com"],
         "private_key": "fixture-private-key",
+        "public_key": "fixture-public-key",
         "short_id": "b16bc7a153e6f1b7",
     }
     arguments.update(overrides)
@@ -56,6 +57,9 @@ class XrayConfigRenderTests(unittest.TestCase):
         self.assertEqual(reality["dest"], "www.swift.com:443")
         self.assertEqual(reality["serverNames"], ["www.swift.com"])
         self.assertEqual(reality["privateKey"], "fixture-private-key")
+        # Marzban builds client links from this value instead of re-deriving it
+        # with `xray x25519 -i`, which rejects the inbound when it cannot parse.
+        self.assertEqual(reality["publicKey"], "fixture-public-key")
         self.assertEqual(reality["shortIds"], ["b16bc7a153e6f1b7"])
         self.assertNotIn(
             "PLACEHOLDER", json.dumps(config), "a placeholder survived rendering"

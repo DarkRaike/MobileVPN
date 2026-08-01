@@ -35,6 +35,10 @@ REALITY_CLIENT_FILE = SECRETS_DIRECTORY / "reality-client.json"
 CONTAINER_SECRETS_DIRECTORY = "/run/astra/secrets"
 MARZBAN_SOCKET_PATH = "/run/marzban/uvicorn.sock"
 
+# Label of the Marzban proxy host this deployment owns. It is also how
+# `marzban_host_sync.py` recognises its own row on the next start.
+MARZBAN_HOST_REMARK = "Astra VPN"
+
 DOMAIN_PATTERN = re.compile(
     r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
 )
@@ -227,6 +231,7 @@ def render_xray_config(
     reality_dest: str,
     reality_server_names: list[str],
     private_key: str,
+    public_key: str,
     short_id: str,
     log_level: str = "warning",
 ) -> str:
@@ -253,6 +258,10 @@ def render_xray_config(
     reality["dest"] = reality_dest
     reality["serverNames"] = reality_server_names
     reality["privateKey"] = private_key
+    # Xray ignores `publicKey` on an inbound that declares `dest`, but Marzban
+    # reads it to build client links and otherwise re-derives it by running
+    # `xray x25519 -i`; a parse failure there rejects the whole inbound.
+    reality["publicKey"] = public_key
     reality["shortIds"] = [short_id]
 
     for rule in config.get("routing", {}).get("rules", []):
@@ -307,6 +316,10 @@ def main() -> int:
     if vless_port > 65535:
         raise ConfigurationError("VLESS_PORT must be a valid TCP port")
 
+    # Clients connect to the documented DNS-only record rather than to the
+    # public IP Marzban would otherwise detect once per start.
+    vpn_host = f"vpn.{base_domain}"
+
     reality_dest = read_environment("REALITY_DEST", "www.swift.com:443")
     reality_host, _ = parse_reality_destination(reality_dest)
     reality_server_names = [
@@ -337,6 +350,7 @@ def main() -> int:
             reality_dest,
             reality_server_names,
             generated["REALITY_PRIVATE_KEY"],
+            generated["REALITY_PUBLIC_KEY"],
             generated["REALITY_SHORT_ID"],
             xray_log_level,
         ),
@@ -355,7 +369,7 @@ def main() -> int:
                 "publicKey": generated["REALITY_PUBLIC_KEY"],
                 "serverNames": reality_server_names,
                 "shortId": generated["REALITY_SHORT_ID"],
-                "vpnHost": f"vpn.{base_domain}",
+                "vpnHost": vpn_host,
             },
             indent=2,
             sort_keys=True,
@@ -453,6 +467,10 @@ def main() -> int:
         render_env_file(
             {
                 **marzban_environment,
+                "MARZBAN_HOST_ADDRESS": vpn_host,
+                "MARZBAN_HOST_PORT": str(vless_port),
+                "MARZBAN_HOST_REMARK": MARZBAN_HOST_REMARK,
+                "MARZBAN_VLESS_INBOUND_TAG": inbound_tag,
                 "SUDO_PASSWORD": generated["MARZBAN_PASSWORD"],
                 "SUDO_USERNAME": marzban_username,
             }
@@ -469,6 +487,7 @@ def main() -> int:
                 "secretsDirectory": str(SECRETS_DIRECTORY),
                 "subscriptionHost": f"sub.{base_domain}",
                 "vlessPort": vless_port,
+                "vpnHost": vpn_host,
             }
         )
     )

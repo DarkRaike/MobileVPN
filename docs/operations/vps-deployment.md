@@ -30,7 +30,7 @@ REALITY и Telegram Mini App на одном сервере, и что оста�
 | Сервис             | Роль                                                                        |
 | ------------------ | --------------------------------------------------------------------------- |
 | `bootstrap`        | one-shot: генерирует секреты, REALITY-ключи, `xray_config.json` и env-файлы |
-| `marzban-init`     | one-shot: `alembic upgrade head` и синхронизация пароля sudo-админа         |
+| `marzban-init`     | one-shot: `alembic upgrade head`, пароль sudo-админа и адрес proxy host     |
 | `app-init`         | one-shot: Drizzle migrations и идемпотентный seed тарифов 7/30/90           |
 | `marzban`          | Marzban на Unix-сокете и Xray REALITY на `8443/tcp`                         |
 | `app`              | SvelteKit Node server на внутреннем `3000`                                  |
@@ -94,6 +94,9 @@ IP VPS:
 | A   | `sub` | `<IP VPS>` | Marzban `/sub/*`                        |
 | A   | `vpn` | `<IP VPS>` | VLESS REALITY на `VLESS_PORT`           |
 
+Запись `vpn` обязательна: именно она попадает в клиентские конфигурации как
+адрес подключения (см. «Адрес, который получает клиент»).
+
 Если DNS обслуживает Cloudflare, для всех трёх записей проксирование должно быть
 выключено (серое облако): оранжевое облако подменяет TLS на `app`/`sub` и
 полностью ломает REALITY на `vpn`.
@@ -145,7 +148,7 @@ HTTP-01 challenge и без корректного DNS получит отказ
 | `worker.env`             | секреты reconciliation worker                                                                                                                   |
 | `monitoring.env`         | секреты и параметры alerting                                                                                                                    |
 | `marzban.env`            | `UVICORN_UDS`, `XRAY_JSON`, `XRAY_SUBSCRIPTION_URL_PREFIX`                                                                                      |
-| `marzban-init.env`       | то же плюс `SUDO_USERNAME` и `SUDO_PASSWORD` для импорта и синхронизации админа                                                                 |
+| `marzban-init.env`       | то же плюс `SUDO_USERNAME`, `SUDO_PASSWORD` и адрес proxy host для синхронизации админа и endpoint                                              |
 | `xray_config.json`       | inbound `VLESS_TCP_REALITY_V1` с приватным ключом и short ID                                                                                    |
 | `reality-client.json`    | публичные параметры подключения: public key, short ID, SNI, порт                                                                                |
 | `restic_password`        | пароль restic repository                                                                                                                        |
@@ -215,6 +218,29 @@ ssh -N -L 8000:127.0.0.1:8000 operator@vps
 Xray config подключается read-only, поэтому изменения ядра из панели не
 сохраняются: конфигурация меняется только через
 `deployment/xray/xray_config.template.json` и переменные стека.
+
+### Адрес, который получает клиент
+
+Marzban при первом появлении inbound создаёт proxy host с адресом
+`{SERVER_IP}`. Этот placeholder раскрывается один раз за старт запросом к
+внешнему echo-сервису (`api4.ipify.org`, `ipv4.icanhazip.com`, `ifconfig.io`) и
+при недоступности любого из них падает до `127.0.0.1`. Значение попадает в
+каждую выданную подписку без проверок, поэтому одна неудачная попытка раздаёт
+конфигурации, которые не могут подключиться, при полностью «здоровом» стеке.
+
+Поэтому адрес задаёт `deployment/bootstrap/marzban_host_sync.py`: при каждом
+старте он приводит proxy host к `vpn.<domain>` на `VLESS_PORT`. SNI, security и
+fingerprint остаются унаследованными от inbound, так что host не может разойтись
+с отрендеренным Xray config. Скрипт занимает строку `inbounds` до старта
+Marzban, поэтому default с `{SERVER_IP}` больше не создаётся, а на уже
+работающем стеке — переносится на домен.
+
+Ничего не удаляется: если в панели заведены собственные host-записи, скрипт
+сообщает об этом и не трогает список.
+
+Отсюда требование к DNS: запись `vpn.<domain>` обязана быть A/AAAA **без
+проксирования** (в Cloudflare — серое облако). Проксированная запись отдаёт
+чужой IP и ломает REALITY.
 
 ### Диагностика подключения клиента
 
