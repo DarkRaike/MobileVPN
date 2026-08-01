@@ -244,6 +244,7 @@ def render_xray_config(
     public_key: str,
     short_id: str,
     log_level: str = "warning",
+    reality_show: bool = False,
 ) -> str:
     try:
         config = json.loads(TEMPLATE_FILE.read_text(encoding="utf-8"))
@@ -265,6 +266,12 @@ def render_xray_config(
     inbound["tag"] = inbound_tag
     inbound["port"] = vless_port
     reality = inbound["streamSettings"]["realitySettings"]
+    # `show` makes REALITY print why it refused a handshake, which is the only
+    # way to tell a client that presented the wrong short ID from one whose
+    # ClientHello the build cannot parse at all. Both are logged identically as
+    # `processed invalid connection`. It prints one block per connection, so it
+    # stays off outside a diagnosis.
+    reality["show"] = reality_show
     reality["dest"] = reality_dest
     reality["serverNames"] = reality_server_names
     reality["privateKey"] = private_key
@@ -381,6 +388,7 @@ def main() -> int:
             generated["REALITY_PUBLIC_KEY"],
             generated["REALITY_SHORT_ID"],
             xray_log_level,
+            boolean_environment("REALITY_SHOW"),
         ),
     )
 
