@@ -179,6 +179,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     auditLog,
     catalog,
     grants,
+    // A queued grant that never moves is almost always a switched off
+    // deployment, so the reason belongs in the interface rather than in logs.
+    liveOperationsEnabled: Boolean(
+      config.liveOperationsEnabled && config.subscriptionUrlEncryptionKey,
+    ),
     orders,
     ticketStatus: ticketStatus ?? "all",
     tickets,
@@ -257,18 +262,18 @@ export const actions = {
       const input = parseGrantInput(context.formData);
       const config = getRuntimeConfig();
 
-      // Without live operations the grant could never be provisioned, and the
-      // paid order would keep the paid_without_subscription signal critical.
-      if (
-        !config.liveOperationsEnabled ||
-        !config.subscriptionUrlEncryptionKey
-      ) {
+      if (!config.subscriptionUrlEncryptionKey) {
         throw new ApplicationError(
           "LIVE_OPERATIONS_DISABLED",
           "Выдача недоступна: включите ENABLE_LIVE_OPERATIONS.",
         );
       }
 
+      // Everything that can refuse the grant has to run before the order is
+      // written. An order created without a usable Marzban adapter stays paid
+      // and unprovisioned forever: nothing in the interface can retry a queued
+      // order, and the worker ignores it while live operations are off.
+      const marzban = getMarzban(config);
       const grant = await grantSubscription(context.database, {
         adminUserId: context.adminUserId,
         durationDays: input.durationDays,
@@ -279,7 +284,7 @@ export const actions = {
       // worker retries on its own schedule if Marzban is unavailable.
       const result = await provisionOrder(
         context.database,
-        getMarzban(config),
+        marzban,
         config.subscriptionUrlEncryptionKey,
         grant.orderId,
       );
