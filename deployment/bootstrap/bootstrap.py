@@ -355,7 +355,7 @@ def main() -> int:
             "REALITY_ENDPOINT_HOST must be a domain or an IPv4 address"
         )
 
-    reality_dest = read_environment("REALITY_DEST", "www.swift.com:443")
+    reality_dest = read_environment("REALITY_DEST", "www.nvidia.com:443")
     reality_host, _ = parse_reality_destination(reality_dest)
     reality_server_names = [
         name.strip()
