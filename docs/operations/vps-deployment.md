@@ -216,6 +216,31 @@ Xray config подключается read-only, поэтому изменени�
 сохраняются: конфигурация меняется только через
 `deployment/xray/xray_config.template.json` и переменные стека.
 
+### Диагностика подключения клиента
+
+Отклонённый REALITY-хендшейк на уровне `warning` в лог не попадает, поэтому
+клиент, который не может подключиться, не оставляет следов. На время разбора
+уровень поднимается переменной стека:
+
+```bash
+XRAY_LOG_LEVEL=info docker compose --env-file deployment/production.env -f deployment/compose.production.yaml up -d --force-recreate bootstrap marzban
+```
+
+```bash
+docker compose --env-file deployment/production.env -f deployment/compose.production.yaml logs --tail=200 marzban
+```
+
+После разбора значение возвращается к `warning`. Access-логи не включаются ни
+на одном уровне: это запрещено политикой хранения данных из `tech.md`.
+
+Полезные проверки без секретов:
+
+- REALITY жив, если TLS-проба на `vpn.<domain>:8443` с SNI из `serverNames`
+  возвращает подлинный сертификат маскировочного сайта;
+- клиент дошёл до аутентификации, если в профиле Mini App растёт израсходованный
+  трафик; нулевой трафик означает, что до Xray соединение не дошло или UUID не
+  принят.
+
 ## 8. Telegram webhook
 
 Регистрация webhook — отдельная явная операция, потому что она меняет настройки

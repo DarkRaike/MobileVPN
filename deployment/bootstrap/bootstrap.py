@@ -39,6 +39,7 @@ DOMAIN_PATTERN = re.compile(
     r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
 )
 MARZBAN_USERNAME_PATTERN = re.compile(r"^[a-z0-9_]{3,32}$")
+XRAY_LOG_LEVELS = ("debug", "info", "warning", "error", "none")
 TELEGRAM_BOT_TOKEN_PATTERN = re.compile(r"^\d+:[A-Za-z0-9_-]{20,}$")
 TELEGRAM_USER_ID_PATTERN = re.compile(r"^\d{1,20}$")
 
@@ -227,6 +228,7 @@ def render_xray_config(
     reality_server_names: list[str],
     private_key: str,
     short_id: str,
+    log_level: str = "warning",
 ) -> str:
     try:
         config = json.loads(TEMPLATE_FILE.read_text(encoding="utf-8"))
@@ -237,6 +239,12 @@ def render_xray_config(
 
     if not isinstance(inbounds, list) or len(inbounds) != 1:
         raise ConfigurationError("The Xray template must declare exactly one inbound")
+
+    # A rejected REALITY handshake is only reported below `warning`, so a client
+    # that cannot connect leaves no trace at the default level. Access logging
+    # stays off: the retention policy forbids it.
+    config.setdefault("log", {})["loglevel"] = log_level
+    config["log"]["access"] = "none"
 
     inbound = inbounds[0]
     inbound["tag"] = inbound_tag
@@ -312,6 +320,12 @@ def main() -> int:
 
     application_uid = positive_integer_environment("APP_UID", 1000)
     application_gid = positive_integer_environment("APP_GID", 1000)
+    xray_log_level = read_environment("XRAY_LOG_LEVEL", "warning").lower()
+
+    if xray_log_level not in XRAY_LOG_LEVELS:
+        raise ConfigurationError(
+            f"XRAY_LOG_LEVEL must be one of {', '.join(XRAY_LOG_LEVELS)}"
+        )
 
     generated = ensure_generated_secrets(marzban_username)
 
@@ -324,6 +338,7 @@ def main() -> int:
             reality_server_names,
             generated["REALITY_PRIVATE_KEY"],
             generated["REALITY_SHORT_ID"],
+            xray_log_level,
         ),
     )
 
