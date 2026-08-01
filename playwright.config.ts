@@ -45,7 +45,7 @@ export default defineConfig({
         MARZBAN_BASE_URL: providerUrl,
         MARZBAN_PASSWORD: "e2e-marzban-password",
         MARZBAN_USERNAME: "e2e-operator",
-        MARZBAN_VLESS_INBOUND_TAG: "VLESS_TCP_REALITY_V1",
+        MARZBAN_VLESS_INBOUND_TAG: "VLESS TCP REALITY",
         NODE_ENV: "test",
         ORIGIN: applicationUrl,
         SESSION_SECRET: "s".repeat(64),

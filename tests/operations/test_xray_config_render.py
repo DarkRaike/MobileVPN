@@ -23,7 +23,7 @@ TEMPLATE = (
 
 def render(**overrides) -> dict:
     arguments = {
-        "inbound_tag": "VLESS_TCP_REALITY_V1",
+        "inbound_tag": "VLESS TCP REALITY",
         "vless_port": 8443,
         "reality_dest": "www.nvidia.com:443",
         "reality_server_names": ["www.nvidia.com"],
@@ -51,7 +51,7 @@ class XrayConfigRenderTests(unittest.TestCase):
         inbound = config["inbounds"][0]
         reality = inbound["streamSettings"]["realitySettings"]
 
-        self.assertEqual(inbound["tag"], "VLESS_TCP_REALITY_V1")
+        self.assertEqual(inbound["tag"], "VLESS TCP REALITY")
         self.assertEqual(inbound["port"], 8443)
         self.assertEqual(inbound["protocol"], "vless")
         self.assertEqual(inbound["settings"]["decryption"], "none")
@@ -62,10 +62,7 @@ class XrayConfigRenderTests(unittest.TestCase):
         # Marzban builds client links from this value instead of re-deriving it
         # with `xray x25519 -i`, which rejects the inbound when it cannot parse.
         self.assertEqual(reality["publicKey"], "fixture-public-key")
-        # The empty short ID is accepted on purpose: Marzban v0.8.4 builds the
-        # first link after every start with an empty `sid`, and a client holding
-        # it authenticates only if the inbound allows it.
-        self.assertEqual(reality["shortIds"], ["", "fdd0e6ec2a4b7c91"])
+        self.assertEqual(reality["shortIds"], ["fdd0e6ec2a4b7c91"])
         self.assertNotIn(
             "PLACEHOLDER", json.dumps(config), "a placeholder survived rendering"
         )

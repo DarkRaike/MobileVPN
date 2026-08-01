@@ -1,13 +1,12 @@
 {
   "log": {
-    "access": "none",
-    "error": "",
     "loglevel": "warning",
+    "access": "none",
     "dnsLog": false
   },
   "inbounds": [
     {
-      "tag": "VLESS_TCP_REALITY_V1",
+      "tag": "VLESS TCP REALITY",
       "listen": "0.0.0.0",
       "port": 8443,
       "protocol": "vless",

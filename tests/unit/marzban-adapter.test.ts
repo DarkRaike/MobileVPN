@@ -14,7 +14,7 @@ function userResponse() {
     created_at: "2026-07-27T12:00:00Z",
     data_limit: 0,
     expire: 1_778_846_400,
-    inbounds: { vless: ["VLESS_TCP_REALITY_V1"] },
+    inbounds: { vless: ["VLESS TCP REALITY"] },
     proxies: { vless: {} },
     status: "active",
     subscription_url: "https://sub.example.com/sub/fixture-token",
@@ -33,7 +33,7 @@ describe("MarzbanAdapter", () => {
       .mockResolvedValueOnce(jsonResponse(userResponse()));
     const adapter = new MarzbanAdapter({
       baseUrl: "http://marzban:8000",
-      inboundTag: "VLESS_TCP_REALITY_V1",
+      inboundTag: "VLESS TCP REALITY",
       password: "fixture-password",
       request,
       username: "admin",
@@ -56,7 +56,7 @@ describe("MarzbanAdapter", () => {
       data_limit: 0,
       data_limit_reset_strategy: "no_reset",
       expire: 1_778_803_200,
-      inbounds: { vless: ["VLESS_TCP_REALITY_V1"] },
+      inbounds: { vless: ["VLESS TCP REALITY"] },
       proxies: { vless: {} },
       status: "active",
       username: "tg_111111111111111111111111",
@@ -77,7 +77,7 @@ describe("MarzbanAdapter", () => {
       );
     const adapter = new MarzbanAdapter({
       baseUrl: "http://marzban:8000",
-      inboundTag: "VLESS_TCP_REALITY_V1",
+      inboundTag: "VLESS TCP REALITY",
       password: "fixture-password",
       request,
       username: "admin",
@@ -96,7 +96,7 @@ describe("MarzbanAdapter", () => {
       .mockResolvedValue(jsonResponse({ detail: "Incorrect username" }, 401));
     const adapter = new MarzbanAdapter({
       baseUrl: "http://marzban:8000",
-      inboundTag: "VLESS_TCP_REALITY_V1",
+      inboundTag: "VLESS TCP REALITY",
       password: "stale-password",
       request,
       username: "admin",
@@ -124,7 +124,7 @@ describe("MarzbanAdapter", () => {
       .mockResolvedValueOnce(jsonResponse(userResponse()));
     const adapter = new MarzbanAdapter({
       baseUrl: "http://marzban:8000",
-      inboundTag: "VLESS_TCP_REALITY_V1",
+      inboundTag: "VLESS TCP REALITY",
       password: "fixture-password",
       request,
       username: "admin",
