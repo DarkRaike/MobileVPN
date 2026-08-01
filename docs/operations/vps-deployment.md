@@ -500,3 +500,47 @@ target, offsite backup, restore drill и ревью тимлида. При
 Отдельно остаются ручными: покупка домена и DNS, измерение REALITY target через
 `xray tls ping` с production VPS, синхронизация времени на сервере, firewall и
 SSH allowlist, SBOM/CVE review образа Marzban и bundled Xray.
+
+### Обновление ядра Xray
+
+Образ Marzban `v0.8.4` собран с ядром от 31 декабря 2024. Оно предшествует
+поддержке постквантового обмена `X25519MLKEM768` в REALITY, а современные
+мобильные клиенты отправляют именно такой ClientHello. Сервер его не
+аутентифицирует, и при `REALITY_SHOW=true` в логе видно:
+
+```text
+REALITY remoteAddr: <адрес клиента>	hs.c.handshakeStatus: false
+```
+
+Клиент, собранный на том же ядре 24.12.31, при этом проходит с теми же
+параметрами. Признак однозначный: дело в версии ядра, а не в конфигурации.
+
+Marzban запускает бинарник по пути из `XRAY_EXECUTABLE_PATH`, поэтому ядро
+обновляется без пересборки закреплённого образа. Скачивание и проверку
+контрольной суммы выполняет оператор:
+
+```bash
+cd /root/MobileVPN/deployment/xray/bin && curl -fsSLO https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip && curl -fsSLO https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip.dgst
+```
+
+```bash
+grep -i "^SHA2-256=" Xray-linux-64.zip.dgst && sha256sum Xray-linux-64.zip
+```
+
+Значения обязаны совпасть. Только после этого:
+
+```bash
+unzip -o Xray-linux-64.zip xray && chmod 0755 xray && rm -f Xray-linux-64.zip Xray-linux-64.zip.dgst && ./xray version
+```
+
+Затем `XRAY_EXECUTABLE_PATH=/opt/xray/xray` в `production.env` и пересоздание:
+
+```bash
+docker compose --env-file deployment/production.env -f deployment/compose.production.yaml up -d --force-recreate bootstrap marzban
+```
+
+Каталог `deployment/xray/bin` не отслеживается Git: бинарник — release artifact,
+а не исходник. Обновление ядра требует нового SBOM/CVE review по `tech.md`.
+
+Откат — очистить `XRAY_EXECUTABLE_PATH` и пересоздать те же сервисы: ключи,
+конфиг и выданные подписки при этом не меняются.

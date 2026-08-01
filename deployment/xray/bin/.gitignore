@@ -1,0 +1,4 @@
+# The upgraded Xray binary is fetched by the operator and verified by checksum;
+# it is a release artifact, not source, and must not enter the repository.
+*
+!.gitignore
