@@ -139,22 +139,22 @@ describe("parseRuntimeConfig", () => {
     );
   });
 
-  it("blocks production live operations while evidence gates are pending", () => {
-    expect(() =>
-      parseRuntimeConfig({
-        ...PRODUCTION_ENVIRONMENT,
-        ENABLE_LIVE_OPERATIONS: "true",
-        INTERNAL_JOB_SECRET: "j".repeat(32),
-        MARZBAN_BASE_URL: "http://marzban:8000",
-        MARZBAN_PASSWORD: "marzban-password",
-        MARZBAN_USERNAME: "operator",
-        SUBSCRIPTION_URL_ENCRYPTION_KEY: "e".repeat(43),
-        TELEGRAM_WEBHOOK_SECRET: "w".repeat(32),
-      }),
-    ).toThrowError(
-      expect.objectContaining({
-        fields: ["ENABLE_LIVE_OPERATIONS"],
-      }),
-    );
+  // Gate enforcement itself is covered by production-readiness.test.ts, which
+  // withdraws gates from a cloned record; here the approved contract has to
+  // actually let production live operations start.
+  it("allows production live operations once the evidence gates are approved", () => {
+    const config = parseRuntimeConfig({
+      ...PRODUCTION_ENVIRONMENT,
+      ENABLE_LIVE_OPERATIONS: "true",
+      INTERNAL_JOB_SECRET: "j".repeat(32),
+      MARZBAN_BASE_URL: "http://marzban:8000",
+      MARZBAN_PASSWORD: "marzban-password",
+      MARZBAN_USERNAME: "operator",
+      SUBSCRIPTION_URL_ENCRYPTION_KEY: "e".repeat(43),
+      TELEGRAM_WEBHOOK_SECRET: "w".repeat(32),
+    });
+
+    expect(config.liveOperationsEnabled).toBe(true);
+    expect(config.marzban?.baseUrl).toBe("http://marzban:8000");
   });
 });

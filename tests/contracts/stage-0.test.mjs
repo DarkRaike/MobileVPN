@@ -16,7 +16,10 @@ const decisions = requireRecord(
 test("stage 0 decisions cover every requested external boundary", () => {
   assert.equal(decisions.stage, 0);
   assert.equal(decisions.implementationStatus, "approved_for_implementation");
-  assert.equal(decisions.productionReady, false);
+  assert.equal(decisions.productionReady, true);
+  // Legal texts are owner-approved placeholders; the record has to say so for
+  // as long as that is true.
+  assert.equal(decisions.legalContentStatus, "placeholder");
 
   for (const section of [
     "payments",
@@ -76,7 +79,7 @@ test("network topology exposes only the selected public entry points", () => {
   const templates = requireRecord(domains.templates, "domain templates");
   const reverseProxy = requireRecord(decisions.reverseProxy, "reverse proxy");
 
-  assert.equal(domains.baseDomain, null);
+  assert.equal(domains.baseDomain, "vpn-service.fun");
   assert.equal(templates.application, "app.{baseDomain}");
   assert.equal(templates.subscription, "sub.{baseDomain}");
   assert.equal(templates.reality, "vpn.{baseDomain}");
@@ -128,11 +131,27 @@ test("the provided HTML remains the design source of truth", async () => {
   }
 });
 
-test("production remains fail-closed while evidence gates are pending", () => {
-  assert.throws(
-    () => assertProductionReady(decisions),
-    /Production gates are not approved/u,
+test("production stays fail-closed when any single gate is withdrawn", () => {
+  assert.equal(assertProductionReady(decisions), true);
+
+  const readiness = requireRecord(
+    decisions.productionReadiness,
+    "production readiness",
   );
+  assert.ok(Array.isArray(readiness.requiredGateIds));
+
+  for (const gateId of readiness.requiredGateIds) {
+    const withdrawn = structuredClone(decisions);
+    requireRecord(withdrawn.productionReadiness, "production readiness").gates[
+      gateId
+    ] = false;
+
+    assert.throws(
+      () => assertProductionReady(withdrawn),
+      new RegExp(`Production gates are not approved: ${gateId}`, "u"),
+      `Gate ${gateId} must be enforced`,
+    );
+  }
 });
 
 test("production approval requires every gate and concrete deployment values", () => {
