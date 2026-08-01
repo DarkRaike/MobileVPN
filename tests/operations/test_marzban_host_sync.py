@@ -28,6 +28,7 @@ def create_schema(connection: sqlite3.Connection) -> None:
         "address TEXT NOT NULL,"
         "port INTEGER,"
         "sni TEXT,"
+        "host TEXT,"
         "security TEXT NOT NULL,"
         "alpn TEXT NOT NULL DEFAULT 'none',"
         "fingerprint TEXT NOT NULL DEFAULT 'none',"
@@ -38,7 +39,7 @@ def create_schema(connection: sqlite3.Connection) -> None:
 
 def hosts(connection: sqlite3.Connection) -> list[tuple]:
     return connection.execute(
-        "SELECT remark, address, port, security, sni FROM hosts ORDER BY id"
+        "SELECT remark, address, port, security, host FROM hosts ORDER BY id"
     ).fetchall()
 
 
