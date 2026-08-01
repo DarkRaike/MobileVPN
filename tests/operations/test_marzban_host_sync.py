@@ -12,7 +12,7 @@ sys.path.insert(
 
 from marzban_host_sync import READY, reconcile  # noqa: E402
 
-INBOUND_TAG = "VLESS TCP REALITY"
+INBOUND_TAG = "VLESS WS"
 REMARK = "Astra VPN"
 
 
@@ -59,7 +59,7 @@ class MarzbanHostSyncTests(unittest.TestCase):
             )
             self.assertEqual(
                 hosts(connection),
-                [(REMARK, "vpn.example.org", 8443, "inbound_default", None)],
+                [(REMARK, "vpn.example.org", 8443, "tls", None)],
             )
 
     def test_moves_an_existing_deployment_off_the_detected_ip(self) -> None:
@@ -69,7 +69,7 @@ class MarzbanHostSyncTests(unittest.TestCase):
             connection.execute(
                 "INSERT INTO hosts (remark, address, security, inbound_tag)"
                 " VALUES (?, ?, ?, ?)",
-                ("🚀 Marz", "{SERVER_IP}", "inbound_default", INBOUND_TAG),
+                ("🚀 Marz", "{SERVER_IP}", "tls", INBOUND_TAG),
             )
 
             self.assertEqual(
@@ -78,7 +78,7 @@ class MarzbanHostSyncTests(unittest.TestCase):
             )
             self.assertEqual(
                 hosts(connection),
-                [(REMARK, "vpn.example.org", 8443, "inbound_default", None)],
+                [(REMARK, "vpn.example.org", 8443, "tls", None)],
             )
 
     def test_follows_a_changed_domain_and_port(self) -> None:
@@ -92,7 +92,7 @@ class MarzbanHostSyncTests(unittest.TestCase):
             )
             self.assertEqual(
                 hosts(connection),
-                [(REMARK, "vpn.new.org", 9443, "inbound_default", None)],
+                [(REMARK, "vpn.new.org", 9443, "tls", None)],
             )
 
     def test_repeated_runs_change_nothing(self) -> None:

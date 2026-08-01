@@ -497,7 +497,7 @@ API доступен только во внутренней Docker-сети. Run
 
 Первая версия использует один inbound:
 
-- tag `VLESS TCP REALITY`;
+- tag `VLESS WS`;
 - VLESS + RAW/TCP на 8443;
 - REALITY;
 - flow отсутствует — обычный VLESS;
@@ -900,7 +900,7 @@ SQLite подходит для первой версии и одного экз�
 Порты:
 
 - 80/443 — Caddy и HTTPS;
-- 8443/TCP — `VLESS TCP REALITY`;
+- 8443/TCP — `VLESS WS`;
 - 22 — SSH только по operator IP allowlist;
 - 3000, 8000 и 2019 — только приватная Docker-сеть.
 
@@ -1021,7 +1021,7 @@ SUBSCRIPTION_URL_ENCRYPTION_KEY=
 MARZBAN_BASE_URL=
 MARZBAN_USERNAME=
 MARZBAN_PASSWORD=
-MARZBAN_VLESS_INBOUND_TAG=VLESS TCP REALITY
+MARZBAN_VLESS_INBOUND_TAG=VLESS WS
 
 BASE_DOMAIN=
 

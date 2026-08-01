@@ -1,21 +1,22 @@
-# Xray owns the public 443 — the only port that reaches this server from every
-# network — and hands Caddy every connection it does not authenticate. Caddy
-# still listens on 443 inside its own container and simply publishes no port, so
-# redirects, ACME and site addresses keep their standard shape.
-#
-# Port 80 stays published for the ACME HTTP-01 challenge. TLS-ALPN-01 is refused
-# explicitly: it would have to answer on the public 443, which Xray holds, and
-# Caddy would otherwise keep retrying a challenge that cannot succeed.
+# Caddy owns the public 443 again. The tunnel is not a separate service on a
+# separate port: it is one secret path on the application host, reverse proxied
+# to Xray over WebSocket. Everything an observer can see is ordinary HTTPS to an
+# ordinary site with a real certificate, because that is exactly what it is.
 {
 	admin off
-
-	cert_issuer acme {$ACME_CA} {
-		email {$ACME_EMAIL}
-		disable_tlsalpn_challenge
-	}
+	email {$ACME_EMAIL}
+	acme_ca {$ACME_CA}
 }
 
 app.{$BASE_DOMAIN} {
+	# The tunnel. `handle` blocks are mutually exclusive and evaluated in source
+	# order, so this one has to precede the catch-all that serves the Mini App.
+	# Compression stays off here: the payload is already encrypted, and Caddy
+	# must not buffer a long lived stream.
+	handle {$WEBSOCKET_PATH} {
+		reverse_proxy xray:2096
+	}
+
 	encode zstd gzip
 
 	reverse_proxy app:3000 {

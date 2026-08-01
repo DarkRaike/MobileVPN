@@ -107,7 +107,7 @@ function marzbanUser(input: MarzbanInput): MarzbanUser {
   return {
     data_limit: 0,
     expire: input.expire,
-    inbounds: { vless: ["VLESS TCP REALITY"] },
+    inbounds: { vless: ["VLESS WS"] },
     proxies: { vless: {} },
     status: "active",
     subscription_url: `https://sub.example.test/sub/e2e-${input.username}`,

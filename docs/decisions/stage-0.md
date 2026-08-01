@@ -79,7 +79,7 @@ Xray слушает публичный 443 и отдаёт неаутентиф�
 
 Первая версия использует:
 
-- inbound `VLESS TCP REALITY`;
+- inbound `VLESS WS`;
 - VLESS + RAW/TCP;
 - TCP 443;
 - REALITY;

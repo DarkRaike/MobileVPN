@@ -116,10 +116,10 @@ test("Marzban user schemas retain provisioning fields", () => {
 test("the selected VLESS contract maps to Marzban's unlimited user model", () => {
   const vless = requireRecord(decisions.vless, "VLESS decision");
 
-  assert.equal(vless.inboundTag, "VLESS TCP REALITY");
+  assert.equal(vless.inboundTag, "VLESS WS");
   assert.equal(vless.port, 443);
-  assert.equal(vless.transport, "raw_tcp");
-  assert.equal(vless.security, "reality");
+  assert.equal(vless.transport, "websocket_over_tls");
+  assert.equal(vless.security, "tls");
   assert.equal(vless.flow, "");
   assert.equal(vless.trafficLimitBytes, 0);
   assert.equal(vless.resetStrategy, "no_reset");

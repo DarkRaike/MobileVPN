@@ -171,11 +171,7 @@ test("production approval requires every gate and concrete deployment values", (
   approved.productionReady = true;
   const domains = requireRecord(approved.domains, "domains");
   domains.baseDomain = "astra-vpn.ru";
-  const vless = requireRecord(approved.vless, "VLESS");
-  const reality = requireRecord(vless.reality, "REALITY");
-  reality.target = "www.nvidia.com:443";
-  reality.serverNames = ["www.nvidia.com"];
-
+  requireRecord(approved.vless, "VLESS");
   assert.equal(assertProductionReady(approved), true);
 
   domains.baseDomain = "astra.example";

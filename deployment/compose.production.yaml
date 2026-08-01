@@ -17,24 +17,22 @@ services:
     init: true
     environment:
       ALERT_REPEAT_MILLISECONDS: ${ALERT_REPEAT_MILLISECONDS:-1800000}
+      ACME_CA: ${ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
       ALERT_TELEGRAM_CHAT_ID: ${ALERT_TELEGRAM_CHAT_ID:-}
       APP_GID: ${APP_GID:-1000}
       APP_UID: ${APP_UID:-1000}
       BASE_DOMAIN: ${BASE_DOMAIN:?Set BASE_DOMAIN}
       ENABLE_LIVE_OPERATIONS: ${ENABLE_LIVE_OPERATIONS:-false}
       MARZBAN_USERNAME: ${MARZBAN_USERNAME:-astra_admin}
-      MARZBAN_VLESS_INBOUND_TAG: "${MARZBAN_VLESS_INBOUND_TAG:-VLESS TCP REALITY}"
+      MARZBAN_VLESS_INBOUND_TAG: "${MARZBAN_VLESS_INBOUND_TAG:-VLESS WS}"
+      VPN_HOST: ${VPN_HOST:-}
       MONITORING_INTERVAL_MILLISECONDS: ${MONITORING_INTERVAL_MILLISECONDS:-60000}
       PYTHONDONTWRITEBYTECODE: "1"
-      REALITY_DEST: ${REALITY_DEST:-reverse-proxy:443}
-      REALITY_ENDPOINT_HOST: ${REALITY_ENDPOINT_HOST:-}
-      REALITY_SERVER_NAMES: ${REALITY_SERVER_NAMES:-}
-      REALITY_SHOW: ${REALITY_SHOW:-false}
       RECONCILIATION_INTERVAL_MILLISECONDS: ${RECONCILIATION_INTERVAL_MILLISECONDS:-30000}
       TELEGRAM_ADMIN_USER_ID: ${TELEGRAM_ADMIN_USER_ID:?Set TELEGRAM_ADMIN_USER_ID}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN}
       TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: ${TELEGRAM_INIT_DATA_MAX_AGE_SECONDS:-300}
-      VLESS_PORT: ${VLESS_PORT:-443}
       XRAY_EXECUTABLE_PATH: ${XRAY_EXECUTABLE_PATH:-}
       XRAY_LOG_LEVEL: ${XRAY_LOG_LEVEL:-warning}
     command:
@@ -137,11 +135,23 @@ services:
       ACME_CA: ${ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
       ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
       BASE_DOMAIN: ${BASE_DOMAIN:?Set BASE_DOMAIN}
-    # Only 80, for the ACME HTTP-01 challenge and the redirect to HTTPS. Caddy
-    # keeps listening on 443 inside the container but publishes nothing: Xray
-    # owns the public 443 and relays to it whatever it does not authenticate.
+    # The tunnel path is generated, so it reaches Caddy the same way every other
+    # generated value reaches its service.
+    entrypoint:
+      - /bin/sh
+      - /run/astra/bootstrap/with-env.sh
+      - /run/astra/secrets/caddy.env
+    command:
+      - caddy
+      - run
+      - --config
+      - /etc/caddy/Caddyfile
+      - --adapter
+      - caddyfile
     ports:
       - "80:80"
+      - "443:443"
+      - "443:443/udp"
     networks:
       backend:
         # The application reaches the Marzban API at http://marzban:8000 through
@@ -149,10 +159,12 @@ services:
         aliases:
           - marzban
       edge: {}
-      # Xray dials this proxy as its REALITY target, so the two share a network.
+      # Caddy forwards the tunnel path to Xray, so the two share a network.
       vpn-egress: {}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./bootstrap:/run/astra/bootstrap:ro
+      - ${DEPLOY_SECRET_DIRECTORY:-./secrets}:/run/astra/secrets:ro
       - caddy-data:/data
       - marzban-socket:/run/marzban
     read_only: true
@@ -330,15 +342,15 @@ services:
     command:
       - sh
       - /run/astra/bootstrap/marzban-run.sh
-    # The public HTTPS port. Anything that is not an authenticated REALITY
-    # client is relayed to Caddy, so this stays the entry point for the Mini App
-    # and the subscription host as well as for the VPN.
-    ports:
-      - "${VLESS_PORT:-443}:${VLESS_PORT:-443}/tcp"
-    # Marzban stays off the backend network: the API is reachable only through
-    # the reverse proxy, which owns the `marzban` alias there.
+    # Nothing is published: the tunnel arrives from Caddy over the private
+    # network, and the API only through the reverse proxy.
+    expose:
+      - "2096"
     networks:
-      - vpn-egress
+      vpn-egress:
+        # `marzban` already belongs to the reverse proxy on the backend network.
+        aliases:
+          - xray
     volumes:
       - marzban-data:/var/lib/marzban
       - marzban-socket:/run/marzban
