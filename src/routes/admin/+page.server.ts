@@ -19,8 +19,16 @@ import {
   updatePromoCode,
 } from "$lib/server/modules/catalog/catalog";
 import { listOrdersForAdmin } from "$lib/server/modules/orders/orders";
+import { getMarzban } from "$lib/server/integrations/marzban/runtime";
 import { logEvent } from "$lib/server/observability/logger";
-import { requeueProvisioningOrder } from "$lib/server/modules/subscriptions/provisioning";
+import {
+  grantSubscription,
+  listGrantsForAdmin,
+} from "$lib/server/modules/subscriptions/grants";
+import {
+  provisionOrder,
+  requeueProvisioningOrder,
+} from "$lib/server/modules/subscriptions/provisioning";
 import {
   listAuditLog,
   listSupportTickets,
@@ -34,6 +42,7 @@ import {
   isValidationError,
   parseEntityId,
   parseFaqInput,
+  parseGrantInput,
   parsePlanInput,
   parsePromoCodeInput,
   parseSupportStatus,
@@ -63,6 +72,7 @@ type AdminActionName =
   | "promo.delete"
   | "promo.update"
   | "order.provisioning_retry"
+  | "subscription.grant"
   | "support.status_update";
 
 interface AdminActionEvent {
@@ -156,17 +166,19 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const admin = requireAdminUser(locals.user, config.telegramAdminUserId);
   const { database } = await getDatabase();
   const ticketStatus = parseTicketFilter(url.searchParams.get("ticketStatus"));
-  const [catalog, tickets, auditLog, orders] = await Promise.all([
+  const [catalog, tickets, auditLog, orders, grants] = await Promise.all([
     listCatalogForAdmin(database),
     listSupportTickets(database, ticketStatus),
     listAuditLog(database),
     listOrdersForAdmin(database),
+    listGrantsForAdmin(database),
   ]);
 
   return {
     admin,
     auditLog,
     catalog,
+    grants,
     orders,
     ticketStatus: ticketStatus ?? "all",
     tickets,
@@ -231,6 +243,45 @@ export const actions = {
         action,
         entityId: promoCode.id,
         message: "Промокод создан.",
+        ok: true as const,
+      };
+    } catch (error) {
+      return adminActionError(action, error);
+    }
+  },
+  grantAccess: async (event) => {
+    const action = "subscription.grant" as const;
+
+    try {
+      const context = await prepareAdminAction(event);
+      const input = parseGrantInput(context.formData);
+      const config = getRuntimeConfig();
+      const grant = await grantSubscription(context.database, {
+        adminUserId: context.adminUserId,
+        durationDays: input.durationDays,
+        targetTelegramUserId: input.targetTelegramUserId,
+      });
+
+      // Provision straight away so the administrator sees the outcome; the
+      // worker retries on its own schedule if Marzban is unavailable.
+      let provisioned = false;
+
+      if (config.liveOperationsEnabled && config.subscriptionUrlEncryptionKey) {
+        const result = await provisionOrder(
+          context.database,
+          getMarzban(config),
+          config.subscriptionUrlEncryptionKey,
+          grant.orderId,
+        );
+        provisioned = result.status === "applied";
+      }
+
+      return {
+        action,
+        entityId: grant.orderId,
+        message: provisioned
+          ? `Доступ выдан до ${grant.targetExpiresAt.toLocaleDateString("ru-RU")}.`
+          : "Выдача принята. Доступ появится после подтверждения Marzban.",
         ok: true as const,
       };
     } catch (error) {

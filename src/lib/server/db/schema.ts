@@ -61,6 +61,7 @@ const provisioningStates = [
 const supportStatuses = ["new", "in_progress", "resolved"] as const;
 const deliveryStatuses = ["pending", "sent", "failed"] as const;
 const discountTypes = ["percent", "fixed"] as const;
+export const orderSources = ["purchase", "admin_grant"] as const;
 
 function timestamps() {
   return {
@@ -249,10 +250,12 @@ export const orders = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id),
-    planId: text("plan_id")
-      .notNull()
-      .references(() => plans.id),
+    // Null for administrator grants, which are not tied to a sold plan.
+    planId: text("plan_id").references(() => plans.id),
     promoCodeId: text("promo_code_id").references(() => promoCodes.id),
+    source: text("source", { enum: orderSources })
+      .notNull()
+      .default("purchase"),
     planNameSnapshot: text("plan_name_snapshot").notNull(),
     planDescriptionSnapshot: text("plan_description_snapshot"),
     durationDaysSnapshot: integer("duration_days_snapshot").notNull(),
@@ -292,13 +295,30 @@ export const orders = sqliteTable(
       sql`${table.durationDaysSnapshot} > 0`,
     ),
     check(
+      "orders_source_check",
+      sql`${table.source} IN ('purchase', 'admin_grant')`,
+    ),
+    // An administrator grant carries no money and no plan; a purchase always
+    // carries both.
+    check(
       "orders_amounts_check",
-      sql`${table.subtotalStars} > 0
-        AND ${table.priceStarsSnapshot} > 0
-        AND ${table.discountStars} >= 0
-        AND ${table.discountStars} <= ${table.subtotalStars}
-        AND ${table.totalStars} = ${table.subtotalStars} - ${table.discountStars}
-        AND ${table.totalStars} >= 0`,
+      sql`(
+          ${table.source} = 'admin_grant'
+          AND ${table.planId} IS NULL
+          AND ${table.subtotalStars} = 0
+          AND ${table.priceStarsSnapshot} = 0
+          AND ${table.discountStars} = 0
+          AND ${table.totalStars} = 0
+        ) OR (
+          ${table.source} = 'purchase'
+          AND ${table.planId} IS NOT NULL
+          AND ${table.subtotalStars} > 0
+          AND ${table.priceStarsSnapshot} > 0
+          AND ${table.discountStars} >= 0
+          AND ${table.discountStars} <= ${table.subtotalStars}
+          AND ${table.totalStars} = ${table.subtotalStars} - ${table.discountStars}
+          AND ${table.totalStars} >= 0
+        )`,
     ),
     check("orders_currency_check", sql`${table.currency} = 'XTR'`),
     check(

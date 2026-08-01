@@ -100,6 +100,7 @@ async function claimOrder(
     const records = await transaction
       .select({
         attempts: orders.provisioningAttempts,
+        createdAt: orders.createdAt,
         durationDays: orders.durationDaysSnapshot,
         localExpiresAt: subscriptions.expiresAt,
         localMarzbanUsername: subscriptions.marzbanUsername,
@@ -110,20 +111,27 @@ async function claimOrder(
         paidAt: payments.paidAt,
         provisioningState: orderProvisioning.state,
         provisioningStatus: orders.provisioningStatus,
+        source: orders.source,
         targetExpiresAt: orderProvisioning.targetExpiresAt,
         userId: orders.userId,
       })
       .from(orders)
-      .innerJoin(payments, eq(payments.orderId, orders.id))
+      // Administrator grants have no payment row, so the join stays optional.
+      .leftJoin(payments, eq(payments.orderId, orders.id))
       .innerJoin(orderProvisioning, eq(orderProvisioning.orderId, orders.id))
       .leftJoin(subscriptions, eq(subscriptions.userId, orders.userId))
       .where(eq(orders.id, orderId))
       .limit(1);
     const order = records[0];
+    // A grant is effective from the moment the administrator issued it.
+    const effectivePaidAt =
+      order?.source === "admin_grant"
+        ? (order.paidAt ?? order.createdAt)
+        : order?.paidAt;
 
     if (
       !order ||
-      !order.paidAt ||
+      !effectivePaidAt ||
       order.provisioningState === "applied" ||
       order.orderStatus === "active" ||
       !["paid", "provisioning", "provisioning_failed"].includes(
@@ -200,7 +208,7 @@ async function claimOrder(
       marzbanUsername:
         order.localMarzbanUsername ?? createMarzbanUsername(order.userId),
       orderId,
-      paidAt: order.paidAt,
+      paidAt: effectivePaidAt,
       targetExpiresAt: order.targetExpiresAt,
       userId: order.userId,
     };
@@ -452,17 +460,21 @@ export async function requeueProvisioningOrder(
         orderStatus: orders.status,
         paymentStatus: payments.status,
         provisioningState: orderProvisioning.state,
+        source: orders.source,
       })
       .from(orders)
-      .innerJoin(payments, eq(payments.orderId, orders.id))
+      .leftJoin(payments, eq(payments.orderId, orders.id))
       .innerJoin(orderProvisioning, eq(orderProvisioning.orderId, orders.id))
       .where(eq(orders.id, orderId))
       .limit(1);
     const order = records[0];
+    // A grant carries no payment, so only purchases have to be settled.
+    const settled =
+      order?.source === "admin_grant" || order?.paymentStatus === "succeeded";
 
     if (
       !order ||
-      order.paymentStatus !== "succeeded" ||
+      !settled ||
       order.orderStatus !== "provisioning_failed" ||
       order.provisioningState !== "failed"
     ) {
