@@ -116,9 +116,12 @@ function verifyHash(
   // Only `hash` is excluded here. `signature` belongs to the Ed25519 third
   // party method and stays part of the bot token data check string, so every
   // other received field has to be included for the HMAC to match Telegram.
+  // Keys are ordered by code point, not by collation: `localeCompare` ignores
+  // the weight of `_`, so a future field could sort differently than Telegram
+  // signed it.
   const dataCheckString = [...parameters.entries()]
     .filter(([key]) => key !== "hash")
-    .sort(([left], [right]) => left.localeCompare(right))
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
     .map(([key, value]) => `${key}=${value}`)
     .join("\n");
 
