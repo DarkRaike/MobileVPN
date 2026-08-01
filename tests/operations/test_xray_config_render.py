@@ -29,7 +29,9 @@ def render(**overrides) -> dict:
         "reality_server_names": ["www.swift.com"],
         "private_key": "fixture-private-key",
         "public_key": "fixture-public-key",
-        "short_id": "b16bc7a153e6f1b7",
+        # Deliberately not a value any deployment uses: a real short ID is
+        # handed to clients and does not belong in the repository.
+        "short_id": "fdd0e6ec2a4b7c91",
     }
     arguments.update(overrides)
 
@@ -60,7 +62,10 @@ class XrayConfigRenderTests(unittest.TestCase):
         # Marzban builds client links from this value instead of re-deriving it
         # with `xray x25519 -i`, which rejects the inbound when it cannot parse.
         self.assertEqual(reality["publicKey"], "fixture-public-key")
-        self.assertEqual(reality["shortIds"], ["b16bc7a153e6f1b7"])
+        # The empty short ID is accepted on purpose: Marzban v0.8.4 builds the
+        # first link after every start with an empty `sid`, and a client holding
+        # it authenticates only if the inbound allows it.
+        self.assertEqual(reality["shortIds"], ["", "fdd0e6ec2a4b7c91"])
         self.assertNotIn(
             "PLACEHOLDER", json.dumps(config), "a placeholder survived rendering"
         )
