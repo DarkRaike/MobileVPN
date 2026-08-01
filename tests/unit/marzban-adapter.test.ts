@@ -89,4 +89,52 @@ describe("MarzbanAdapter", () => {
       expect.objectContaining({ code: "MARZBAN_RESPONSE_INVALID" }),
     );
   });
+
+  it("separates rejected credentials from a rejected token", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ detail: "Incorrect username" }, 401));
+    const adapter = new MarzbanAdapter({
+      baseUrl: "http://marzban:8000",
+      inboundTag: "VLESS_TCP_REALITY_V1",
+      password: "stale-password",
+      request,
+      username: "admin",
+    });
+
+    await expect(
+      adapter.getUser("tg_111111111111111111111111"),
+    ).rejects.toThrowError(
+      expect.objectContaining({ code: "MARZBAN_CREDENTIALS_REJECTED" }),
+    );
+    // Wrong credentials must not be replayed against the token endpoint.
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes an expired token once before giving up", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({ access_token: "first-token", token_type: "bearer" }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ detail: "expired" }, 401))
+      .mockResolvedValueOnce(
+        jsonResponse({ access_token: "second-token", token_type: "bearer" }),
+      )
+      .mockResolvedValueOnce(jsonResponse(userResponse()));
+    const adapter = new MarzbanAdapter({
+      baseUrl: "http://marzban:8000",
+      inboundTag: "VLESS_TCP_REALITY_V1",
+      password: "fixture-password",
+      request,
+      username: "admin",
+    });
+
+    const user = await adapter.getUser("tg_111111111111111111111111");
+
+    expect(user?.username).toBe("tg_111111111111111111111111");
+    expect(
+      new Headers(request.mock.calls[3]?.[1]?.headers).get("authorization"),
+    ).toBe("Bearer second-token");
+  });
 });

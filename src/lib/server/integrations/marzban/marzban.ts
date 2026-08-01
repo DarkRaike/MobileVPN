@@ -184,15 +184,35 @@ export class MarzbanAdapter implements Marzban {
       password: this.password,
       username: this.username,
     });
-    const response = await this.requestWithRetry(
-      "/api/admin/token",
-      {
-        body,
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        method: "POST",
-      },
-      false,
-    );
+    let response: unknown;
+
+    try {
+      response = await this.requestWithRetry(
+        "/api/admin/token",
+        {
+          body,
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          method: "POST",
+        },
+        false,
+      );
+    } catch (error) {
+      // Marzban rejected the administrator credentials themselves. Retrying
+      // cannot help: the deployment and Marzban hold different passwords, and
+      // the operator has to reconcile them.
+      if (
+        error instanceof ApplicationError &&
+        error.code === "MARZBAN_AUTH_FAILED"
+      ) {
+        throw new ApplicationError(
+          "MARZBAN_CREDENTIALS_REJECTED",
+          "Marzban отклонил учётные данные приложения.",
+        );
+      }
+
+      throw error;
+    }
+
     const tokenResult = tokenSchema.safeParse(response);
 
     if (!tokenResult.success) {
